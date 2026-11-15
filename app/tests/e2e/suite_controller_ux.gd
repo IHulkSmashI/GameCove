@@ -127,6 +127,42 @@ func test_b_on_a_sheet_whose_tile_is_gone_puts_focus_on_the_screen() -> void:
 	await without_stores()
 
 
+## CUX-6: the quick menu opened and closed over a Settings sheet (Profiles: a
+## layer's actions) leaves something focused, whatever is pressed next. These are
+## the presses monkey seed 128004 ended on with nothing focused (Legion, once in
+## CI; they replay clean here, so this holds the sequence rather than a fix).
+func test_the_quick_menu_over_a_settings_sheet_leaves_focus_somewhere() -> void:
+	ok(await open_settings("profiles"), "Settings > Profiles with the pad")
+	await w.frames(3)
+	await a()
+	await w.frames(5)
+	var row: Control = focus()
+	if row == null or not String(row.name).begins_with("Row_"):
+		ok(false, "A on the first profile row opens its actions (%s)" % where())
+		return
+	await view_btn()
+	await w.frames(3)
+	await left()
+	await w.frames(3)
+	await x()
+	await w.frames(5)
+	if not qm().visible:
+		await qam()
+		await w.frames(5)
+	ok(qm().visible, "Quick Access opens the quick menu over the sheet")
+	await qam()
+	await w.wait_s(0.5)
+	ok(not qm().visible, "and closes it")
+	ok(focus() != null and focus().is_visible_in_tree(), "something visible has focus after the menu (%s)" % where())
+	for p in ["left", "up", "down", "right"]:
+		await call(p)
+		await w.frames(2)
+		ok(focus() != null and focus().is_visible_in_tree(), "after %s something visible still has focus (%s)" % [p, where()])
+	eq(focus_on_screen(), "", "and it is on screen")
+	await b()
+	await w.frames(4)
+
+
 ## CUX-7: read-only cards on the device pages take no focus; the right stick
 ## scrolls them into view, and only while it is pushed.
 func test_read_only_device_cards_take_no_focus_and_the_right_stick_scrolls() -> void:

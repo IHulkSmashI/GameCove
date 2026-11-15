@@ -117,7 +117,11 @@ func build() -> void:
 	var deals: Array = Model.visible_deals(d.deals, ctx.keyshops())
 	var wish: Array = d.wishlist
 	var cal: Array = d.calendar
-	var root := Kit.vbox(18)
+	# A wide, short screen (a 21:9 TV lays out 1600x800) has covers 267 px tall under the same 800 px:
+	# the spotlight is made compact there, so a whole shelf (title, covers and the focus ring) still
+	# fits under it (CUX-8).
+	var compact := _compact()
+	var root := Kit.vbox(12 if compact else 18)
 	root.name = "HomeRoot"
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -132,7 +136,7 @@ func build() -> void:
 	var frame := PanelContainer.new()
 	frame.name = "SpotFrame"
 	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var fsb := ThemeLib.box(Color(ThemeLib.color("glass"), 0.45), ThemeLib.radius("xl"), 32, 15)
+	var fsb := ThemeLib.box(Color(ThemeLib.color("glass"), 0.45), ThemeLib.radius("xl"), 32, 8 if compact else 15)
 	fsb.border_color = ThemeLib.color("line_2")
 	fsb.set_border_width_all(1)
 	frame.add_theme_stylebox_override("panel", fsb)
@@ -147,7 +151,7 @@ func build() -> void:
 	header = GameHeader.new()
 	# Wordmarks land at about 260-340 px wide (SteamGridDB's horizontal ones
 	# come first, art.gd); the height keeps the shelves below in view.
-	header.max_logo = Vector2(340, 110)
+	header.max_logo = Vector2(340, 72 if compact else 110)
 	header.max_badges = 0
 	header.meta.visible = false
 	header.extent_changed.connect(_sync_ink)
@@ -160,12 +164,12 @@ func build() -> void:
 	buttons.name = "SpotButtons"
 	primary = Kit.primary(T.VIEW_DEAL, "A")
 	primary.name = "SpotPrimary"
-	primary.custom_minimum_size = Vector2(196, 56)
+	primary.custom_minimum_size = Vector2(196, 48 if compact else 56)
 	primary.add_theme_constant_override("h_separation", 10)
 	primary.pressed.connect(func(): ctx.open_page(spot_view))
 	secondary = Kit.button(T.WISHLIST_ADD)
 	secondary.name = "SpotSecondary"
-	secondary.custom_minimum_size = Vector2(176, 56)
+	secondary.custom_minimum_size = Vector2(176, 48 if compact else 56)
 	secondary.add_theme_constant_override("h_separation", 10)
 	secondary.pressed.connect(_on_secondary)
 	buttons.add_child(primary)
@@ -320,6 +324,10 @@ func _free_note(v: Dictionary, card: Vector2, now: int, cur: String) -> Control:
 	p.name = "FreeNote"
 	p.theme_type_variation = "CardPanel"
 	p.custom_minimum_size = card
+	# Never taller than the card beside it: its wrapped lines ask for a huge height until they have a
+	# width, and a row that once grew to that (1900 px on a 1600x800 layout) never came back down.
+	p.custom_maximum_size = card
+	p.clip_contents = true
 	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var col := Kit.vbox(10)
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -510,6 +518,22 @@ func _on_tile_focus(v: Dictionary, i: int, shelf: Control) -> void:
 		cards_focus[0].focus_neighbor_top = cards_focus[0].get_path_to(t)
 	_scroll_rows(shelf.position.y)
 	_set_spot(v, v.get("line", ""), true)
+
+
+## True where the usual spotlight would leave less room than one shelf needs: the rows' share of the
+## screen (what is left under the top bar, the section tabs and a spotlight of SPOT_FULL_H) against
+## a shelf's height on this screen.
+const CHROME_H := 190.0
+const SPOT_FULL_H := 300.0
+
+func _compact() -> bool:
+	var ml := Engine.get_main_loop()
+	if not (ml is SceneTree) or (ml as SceneTree).root == null:
+		return false
+	var view: Vector2 = (ml as SceneTree).root.get_visible_rect().size
+	var cover: Vector2 = Shelf.Tile.size_for(Shelf.Tile.row_width(), Shelf.GAP)
+	var shelf_h := cover.y + Shelf.PAD.y + Shelf.LABEL_ROOM + 30.0   # its title line above
+	return view.y - CHROME_H - SPOT_FULL_H < shelf_h
 
 
 func _scroll_rows(y: float) -> void:
