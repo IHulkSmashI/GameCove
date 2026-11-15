@@ -23,7 +23,7 @@ contains() {
 # Only these files may sit in the repo root; anything else is a stray download or a leftover.
 for f in $(git -C "$REPO" ls-files | grep -v /); do
 	case "$f" in
-	.gitignore | CONTRIBUTING.md | CREDITS.md | LICENSE | README.md | TRADEMARKS.md) ok ;;
+	.gitignore | CLAUDE.md | CONTRIBUTING.md | CREDITS.md | LICENSE | README.md | TRADEMARKS.md) ok ;;
 	*) bad "unexpected file in the repo root: $f" ;;
 	esac
 done
