@@ -4,7 +4,8 @@ extends Node
 ## taken back to where focus was (docs/CONTROLLER-UX.md CUX-6; Xbox XAG 113: "It
 ## shouldn't be possible to move focus to anything other than interactable
 ## controls in the dialog box while it's open"). Nothing runs while the panel is
-## hidden or while focus stays inside it.
+## hidden, closed (its is_open() says so, when it has one) or while focus stays
+## inside it.
 ##
 ##   FocusTrap.attach(sheet, [keyboard])   # once; `allow`: panels it may hand focus to
 
@@ -41,7 +42,9 @@ func _on_focus(f: Control) -> void:
 	if f != null and (panel.is_ancestor_of(f) or _allowed(f)):
 		_last = f   # also while it fades in: a sheet focuses its first control before it shows
 		return
-	if not panel.is_visible_in_tree():
+	# hidden, or closing (a panel that fades out is still drawn after close(): focus it took back
+	# then went away with it, and nothing was focused)
+	if not panel.is_visible_in_tree() or (panel.has_method("is_open") and not panel.is_open()):
 		_last = null
 		return
 	# left the panel while it is up: back to where it was, else its first control

@@ -83,6 +83,8 @@ func _init() -> void:
 	col.add_child(_close_button)
 	row.add_child(col)
 	_restyle()
+	# the sheet keeps the pad while it is open: no D-pad press reaches the page under the dim (CUX-6)
+	load("res://scripts/ui/focus_trap.gd").attach(self)
 
 
 func _restyle() -> void:
