@@ -81,7 +81,7 @@ func test_the_steam_hand_off_panel_gives_focus_back_when_it_closes() -> void:
 	for p in ["up", "left", "down", "right"]:
 		await call(p)
 		ok(focus() != null and o.is_ancestor_of(focus()), "after %s, focus is still in the panel (%s)" % [p, where()])
-	o.close()
+	await b()   # the way a player leaves it: B closes it and takes the screen back from Steam
 	await w.wait_s(0.6)   # its fade is over
 	ok(not o.visible, "the panel is gone")
 	ok(focus() != null and focus().is_visible_in_tree() and not o.is_ancestor_of(focus()),

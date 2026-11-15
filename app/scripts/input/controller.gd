@@ -490,6 +490,13 @@ func _ensure_shortcuts() -> void:
 func setup_intercept_for_tests() -> void:
 	_setup_intercept()
 	_intercepting = true
+	_pretend_monitor = true
+
+
+## Set by setup_intercept_for_tests(): there is no monitor process to restart. Without it, an "exited"
+## line (a session switch stops the monitor) started the real gdbus every few seconds for the rest of
+## the run; each one exited at once and wrote InterceptMode 0 into whatever test was running then.
+var _pretend_monitor := false
 
 
 func monitor_line(parsed: Dictionary) -> void:
@@ -685,7 +692,7 @@ func _restart_monitor_later() -> void:
 			_gave_up = true
 			hand_back()
 		return
-	if not is_inside_tree():
+	if not is_inside_tree() or _pretend_monitor:
 		return
 	_restarts += 1
 	get_tree().create_timer(5.0 * _restarts).timeout.connect(_restart_monitor_now)   # a method, not a lambda: freed with this node at exit
