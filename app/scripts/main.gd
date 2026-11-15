@@ -2514,8 +2514,11 @@ func focus_kind(f: Control) -> String:
 		return "slider"
 	if f is Button and f.theme_type_variation == "RowButton":
 		var cr: Node = f.get_parent()
-		# a switch or segmented row changes on A; only a "‹ value ›" stepper takes left / right
-		return "row" if cr == null or not cr.has_method("is_stepper") or cr.is_stepper() else "toggle"
+		# a switch or segmented row changes on A; only a "‹ value ›" stepper (or a strip that says
+		# left / right are its value) takes left / right; a plain row that opens something is a button
+		if cr != null and cr.has_method("is_stepper"):
+			return "row" if cr.is_stepper() else "toggle"
+		return "row" if f.has_meta("ux_stepper") else "button"
 	if f is Button and (f.theme_type_variation == "TabButton") and top_bar.is_ancestor_of(f):
 		return "status" if f == top_bar.status_button else "tab"
 	if f is Button and f.name == "Play":

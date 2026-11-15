@@ -182,6 +182,33 @@ func test_the_library_shows_two_rows_of_covers_on_the_smallest_screen() -> void:
 	await without_stores()
 
 
+## CUX-10: the hint bar names what the focused control does. A plain row that opens something
+## ("Open on SteamDB" on the game page) said "left / right: Change", as if it were a stepper.
+func test_the_hint_for_a_row_says_what_it_really_does() -> void:
+	var ChoiceRow: Script = load("res://scripts/ui/choice_row.gd")
+	var host := VBoxContainer.new()
+	w.tree.root.add_child(host)
+	var link := Button.new()
+	link.theme_type_variation = "RowButton"
+	host.add_child(link)
+	eq(main().focus_kind(link), "button", "a row that opens something: A")
+	eq(main().hints_for({"kind": main().focus_kind(link), "page": true})[0], ["A", "Select"], "and the bar says A")
+	var strip := Button.new()
+	strip.theme_type_variation = "RowButton"
+	strip.set_meta("ux_stepper", true)
+	host.add_child(strip)
+	eq(main().focus_kind(strip), "row", "a strip that says left / right are its value: left / right")
+	var stepper: VBoxContainer = ChoiceRow.new()
+	stepper.setup("s", "S", [1, 2, 3, 4, 5], ["1", "2", "3", "4", "5"], 1)
+	host.add_child(stepper)
+	eq(main().focus_kind(stepper.button), "row", "a stepper: left / right")
+	var toggle: VBoxContainer = ChoiceRow.bool_row("t", "T", false)
+	host.add_child(toggle)
+	eq(main().focus_kind(toggle.button), "toggle", "a switch: A changes it")
+	host.queue_free()
+	await w.frames(2)
+
+
 ## CUX-7: read-only cards on the device pages take no focus; the right stick
 ## scrolls them into view, and only while it is pushed.
 func test_read_only_device_cards_take_no_focus_and_the_right_stick_scrolls() -> void:
