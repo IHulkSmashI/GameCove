@@ -60,7 +60,9 @@ static func take(tree: SceneTree, test: String, what: String) -> void:
 	if not on() or tree == null:
 		return
 	await tree.create_timer(SETTLE_S).timeout
-	await RenderingServer.frame_post_draw
+	# drawn now, not "after the next frame": the app only draws when something changed (low-processor
+	# mode), so a press that changes nothing on screen would wait for a frame that never comes
+	RenderingServer.force_draw()
 	var img := tree.root.get_texture().get_image()
 	if img == null or img.is_empty():
 		return
