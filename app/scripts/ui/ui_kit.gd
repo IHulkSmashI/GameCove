@@ -246,24 +246,39 @@ static func nearest_toward(from: Control, items: Array, dir: Vector2) -> Control
 ## or section's main control as it is now; a path set earlier goes stale when
 ## the screen below changes: a new layout, another category). Wired once.
 static func lead_down(buttons: Array, target: Callable) -> void:
+	_lead(buttons, "ui_down", target)
+
+
+## Up from each of `buttons` goes to `target.call()` at the press (what stands
+## above a column of cards as it is now: a grid's last row, whichever tile is nearest).
+static func lead_up(buttons: Array, target: Callable) -> void:
+	_lead(buttons, "ui_up", target)
+
+
+static func _lead(buttons: Array, action: String, target: Callable) -> void:
 	for b in buttons:
 		var c := b as Control
 		if c == null:
 			continue
-		c.set_meta("lead_down", target)
-		if not c.has_meta("lead_down_wired"):
-			c.set_meta("lead_down_wired", true)
-			c.gui_input.connect(_lead_down_input.bind(c))
+		c.set_meta("lead_" + action, target)
+		# one handler for both directions: two binds of one method count as the same connection
+		if not c.has_meta("lead_wired"):
+			c.set_meta("lead_wired", true)
+			c.gui_input.connect(_lead_input.bind(c))
 
 
-static func _lead_down_input(event: InputEvent, c: Control) -> void:
-	if not event.is_action_pressed("ui_down") or c.get_viewport() == null or c.get_viewport().is_input_handled():
+static func _lead_input(event: InputEvent, c: Control) -> void:
+	if c.get_viewport() == null or c.get_viewport().is_input_handled():
 		return
-	var t: Callable = c.get_meta("lead_down")
-	var f: Variant = t.call() if t.is_valid() else null
-	if f is Control and is_instance_valid(f) and (f as Control).is_visible_in_tree() and (f as Control).focus_mode == Control.FOCUS_ALL:
-		c.accept_event()
-		(f as Control).grab_focus()
+	for action in ["ui_up", "ui_down"]:
+		if not c.has_meta("lead_" + action) or not event.is_action_pressed(action, true):
+			continue
+		var t: Callable = c.get_meta("lead_" + action)
+		var f: Variant = t.call() if t.is_valid() else null
+		if f is Control and is_instance_valid(f) and f != c and (f as Control).is_visible_in_tree() and (f as Control).focus_mode == Control.FOCUS_ALL:
+			c.accept_event()
+			(f as Control).grab_focus()
+		return
 
 
 ## Chain controls left to right; ends stop at themselves.

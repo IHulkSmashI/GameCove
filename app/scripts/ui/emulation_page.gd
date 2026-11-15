@@ -494,6 +494,38 @@ func _link_games() -> void:
 		below.focus_neighbor_top = below.get_path_to(game_tiles[last_row_start] if last_row_start >= 0 else _current_pick())
 	if top != null:
 		top.focus_neighbor_bottom = top.get_path_to(_current_pick())
+	# The cards under the grid stand in columns: down from the grid's last row goes to the column
+	# top right below that tile, and up from a column's top to the tile right above it, both found
+	# at the press (the columns are dealt again when the page's width changes; CUX-5).
+	Kit.lead_down(game_tiles, func() -> Control:
+		var f := get_viewport().gui_get_focus_owner() if get_viewport() != null else null
+		var k := game_tiles.find(f)
+		if k < 0 or k / cols < (game_tiles.size() - 1) / cols:
+			return null   # not the last row: the tile below
+		return Kit.nearest_toward(f, _column_tops(), Vector2.DOWN))
+	Kit.lead_up(_column_tops(), func() -> Control:
+		var f := get_viewport().gui_get_focus_owner() if get_viewport() != null else null
+		if f == null or game_tiles.is_empty() or not f in _column_tops():
+			return null
+		var last: Array = game_tiles.slice(((game_tiles.size() - 1) / cols) * cols)
+		var to := Kit.nearest_toward(f, last, Vector2.UP)
+		return to if to != null else last[0])
+
+
+## The controls in each column's first row (the first line of a column's chips,
+## the first button of a list): what a press down from the grid can land on.
+func _column_tops() -> Array:
+	var out := []
+	for col in _col_chains:
+		var chain: Array = _col_chains[col].filter(func(c): return is_instance_valid(c) and c.is_visible_in_tree())
+		if chain.is_empty():
+			continue
+		var first: Control = chain[0]
+		for c in chain:
+			# the same box row or flow line as the column's first control
+			if c.get_parent() == first.get_parent() and absf(c.get_global_rect().position.y - first.get_global_rect().position.y) < first.size.y * 0.5:
+				out.append(c)
+	return out
 
 
 func finish() -> void:

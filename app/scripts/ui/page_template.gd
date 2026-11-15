@@ -693,8 +693,11 @@ func _on_card_input(event: InputEvent, c: Control) -> void:
 	if get_viewport() == null or get_viewport().is_input_handled() or columns == null:
 		return
 	var side := -1 if event.is_action_pressed("ui_left", true) else (1 if event.is_action_pressed("ui_right", true) else 0)
-	if side == 0 or c.get("focus_neighbor_left" if side < 0 else "focus_neighbor_right") != NodePath():
-		return   # not a sideways press, or the control's own row goes on that way
+	if side == 0:
+		return
+	var nb: NodePath = c.get("focus_neighbor_left" if side < 0 else "focus_neighbor_right")
+	if nb != NodePath() and c.get_node_or_null(nb) != c:
+		return   # the control's own row goes on that way (a chip at its line's end points at itself: the column is next)
 	var col := _column_of(c)
 	var i := col.get_index() + side if col != self else -1
 	while i >= 0 and i < columns.get_child_count():
