@@ -89,6 +89,34 @@ func test_a_clean_row_passes() -> void:
 	ok(int(res["stats"]["presses"]) == 12, "every direction from every button (%s)" % res["stats"])
 
 
+## A page of cards under a bar: up from a column's top goes back to the page's action row, though it
+## is scrolled out above and a button of the bar sits straight above. Staying in the page comes first.
+func test_staying_in_the_page_comes_before_a_bar_in_line() -> void:
+	var s := _screen()
+	_button(s, "Bar", Vector2(500, 0), Vector2(120, 48))
+	var sc := ScrollContainer.new()
+	sc.name = "Page"
+	sc.position = Vector2(0, 100)
+	sc.size = Vector2(1000, 400)
+	sc.follow_focus = true
+	s.add_child(sc)
+	var content := Control.new()
+	content.custom_minimum_size = Vector2(1000, 1200)
+	sc.add_child(content)
+	var play := _button(content, "Play", Vector2(20, 0))
+	var col := _button(content, "ColumnTop", Vector2(500, 500))
+	play.focus_neighbor_bottom = play.get_path_to(col)
+	col.focus_neighbor_top = col.get_path_to(play)
+	for b in [play, col]:
+		b.focus_neighbor_left = b.get_path_to(b)
+		b.focus_neighbor_right = b.get_path_to(b)
+	col.focus_neighbor_bottom = col.get_path_to(col)
+	content.size = content.custom_minimum_size
+	sc.scroll_vertical = 300   # the action row is out of view above
+	var res := _scan(s, col)
+	ok(not "pad-order" in _kinds(res) and not "pad-skip" in _kinds(res), "up to the page's own action row is in order: %s" % str(res["problems"]))
+
+
 ## The installer's Continue / Back / Skip row: right went past Back.
 func test_skipping_the_middle_button_is_found() -> void:
 	var s := _screen()

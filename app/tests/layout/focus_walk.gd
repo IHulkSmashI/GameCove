@@ -524,6 +524,10 @@ static func _order_problem(c: Cand, g: Cand, cands: Array[Cand], d: Dictionary) 
 	# somewhere nearer that way than anything in line (the hero's Play above a shelf): Godot's nearest, fine
 	if _gap_to(c, g, v) <= best + NEAR:
 		return ""
+	# staying in the page comes before leaving it: a press that lands on something in the control's own
+	# scroller (the action row, scrolled out above a column's top) is right though a bar outside sits in line
+	if c.in_scroll != null and c.in_scroll in g.chain and not near.any(func(x): return c.in_scroll in x.chain):
+		return ""
 	# out of a navigation bar (top bar, side categories, section tabs) into the screen: its main control (tvOS primary item)
 	var bar := _nav_bar_of(c.node)
 	if bar != null and not bar.is_ancestor_of(g.node):
