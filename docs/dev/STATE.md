@@ -3,10 +3,10 @@
 Each session takes the top unchecked milestone, finishes it and ticks it here. Last updated 2026-11-15.
 
 ## Where we are
-- **v0.1.0** is published as a hidden pre-release (main `5c8fa49` at the time).
-- **M1 and M2 are on main** (2026-11-15): the controller rules and the installer's pad fixes, CI green on the four setups and the five layouts (run 165).
+- **v0.1.1** is published as a pre-release (main `7d5683f`, 2026-11-15); v0.1.0 was `5c8fa49`.
+- **M1, M2 and the M3 highlight fix are on main** (2026-11-15): the controller rules and the installer's pad fixes, CI green on the four setups and the five layouts (run 169).
 - **M3 is answered** (2026-11-15): the owner looked at the sheets and said the pictures are fine but the highlight wasn't the same everywhere (a square frame around the installer's Continue). Fixed: the installer builds the theme when nothing above it has one, choice cards share `ThemeLib.card_focus`, and "selected" is a thin edge and a tick, never a ring. He asked to go straight to M4 so device testing can start.
-- **Testing on the real Claw:** the owner will give SSH access to the Claw. A cloud session reaches it only if the host is allowed in the session's network settings; otherwise run `claude remote-control` (or `claude`) in the GameCove clone on the Claw, in desktop mode. Either way `tools/devicetest/devicetest.sh` drives the real system with a virtual pad. The owner answers every password prompt himself; a session never types one.
+- **Testing on the real Claw:** Claude Code is installed on the Claw and `claude remote-control` runs in `~/src/GameCove` (same-dir), so the owner starts a session on the Claw from the Claude app's Code tab; M5 runs there. A cloud session can't attach to the Claw's folder on this account. `tools/devicetest/devicetest.sh` drives the real system with a virtual pad. The owner answers every password prompt himself; a session never types one. Open question for him: a testbed script was once fetched on the Claw through a mirror host, not github.com; `cmp ~/gamecove-testbed.sh ~/src/GameCove/tools/testbed/gamecove-testbed.sh` must say they match before that copy is used again.
 - **This file is kept current by rule and by a hook:** see the top of `CLAUDE.md`. A session that changes the repo updates it in the same commit.
 - **The Claw right now:**
   - GameCove's RPM is layered with rpm-ostree, pending a reboot.
@@ -37,12 +37,7 @@ Each session takes the top unchecked milestone, finishes it and ticks it here. L
     11. The failure-screen buttons are clipped.
     12. A password per fix, with no keyboard: ask once, with Plasma's keyboard (Steam's on-screen keyboard can't type into KDE's polkit box).
 - [x] **M3 Owner review** (2026-11-15). Ten sheets reviewed on his phone; one finding (highlight looks differ between screens), fixed and held by tests (`test_controller_ux.gd`, the installer journey). `GODOT=<editor> tools/ux_walk/sheets.sh OUT` renders fresh sheets (about 20 minutes for both sizes).
-- [ ] **M4 Release v0.1.1.**
-  1. Short external review of the diff since `5c8fa49`.
-  2. The version is bumped and `packaging/release-notes/v0.1.1.md` is on main (from `fix/installer-pad`); this session's fixes are in the notes.
-  3. Before tagging, run the monkey locally with the seeds the next two CI runs will use (`--suites monkey --seed <run number>`): the seed is the run number, and a new one has found a real focus bug three times.
-  4. Run release.yml with publish and prerelease on.
-  5. The owner approves the release in a browser.
+- [x] **M4 Release v0.1.1** (2026-11-15). Published as a pre-release from main `7d5683f` (CI run 169, Release run 12), with the RPM, the sysext image, the tarball, `get-gamecove.sh`, `SHA256SUMS` and its sigstore signature. The owner approved it in a browser.
 - [ ] **M4b UI polish** (asked by the owner on 2026-11-15; its own session, after the v0.1.1 tag so device testing isn't held up).
   1. Nothing focused is ever cut: the focus ring and its glow (28 px on primary pills) must fit inside the screen and inside any scroll area. Teach the focus walk to measure the glow, not only the ring, then fix what it finds.
   2. Scroll areas at 1280x800 slice their last card or row (installer Stores cards, Summary rows, the Manage sheet): make them end on a whole row, or fade the edge and show a scroll hint.
