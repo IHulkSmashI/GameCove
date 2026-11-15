@@ -276,8 +276,18 @@ func close(restore_focus := true) -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	Motion.fade(self, false)
 	closed.emit()
-	if restore_focus and _focus_before != null and is_instance_valid(_focus_before) and _focus_before.is_visible_in_tree():
+	if not restore_focus:
+		return
+	if _focus_before != null and is_instance_valid(_focus_before) and _focus_before.is_visible_in_tree():
 		_focus_before.grab_focus()
+	elif is_inside_tree():
+		# B, and the control the sheet came from was rebuilt meanwhile (a favourite toggled re-deals
+		# Home's shelves): no row of a sheet that is going keeps focus; the host puts it on the screen
+		var f := get_viewport().gui_get_focus_owner()
+		if f != null and is_ancestor_of(f):
+			f.release_focus()
+		if f == null or is_ancestor_of(f):
+			focus_lost.emit()
 
 
 func is_open() -> bool:

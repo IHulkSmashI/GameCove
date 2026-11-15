@@ -89,6 +89,44 @@ func test_the_steam_hand_off_panel_gives_focus_back_when_it_closes() -> void:
 	eq(focus_on_screen(), "", "which is on screen")
 
 
+## CUX-6: B on a game's options sheet after the tile it came from was rebuilt (a
+## favourite toggled re-deals Home's shelves; monkey seed 121003): focus stayed on
+## a row of the closed sheet and the next press left nothing focused.
+func test_b_on_a_sheet_whose_tile_is_gone_puts_focus_on_the_screen() -> void:
+	await with_stores()
+	ok(await go_tab("home"), "Home with the pad")
+	await w.frames(4)
+	var home: Control = main().screens["home"]
+	var tile: Control = null
+	for i in 12:
+		if focus() != null and "game" in focus() and focus().get("game") is Dictionary and not (focus().get("game") as Dictionary).is_empty() \
+				and focus().get_script() != null and str(focus().get_script().resource_path).ends_with("game_tile.gd"):
+			tile = focus()
+			break
+		await down()
+		await w.frames(2)
+	if tile == null:
+		ok(false, "Home has a game tile the D-pad reaches (%s)" % where())
+		await without_stores()
+		return
+	await start_btn()
+	await w.frames(4)
+	ok(sheet_open(), "Start opens the game's options")
+	# the shelves are dealt again under the sheet, as after a favourite or an install
+	home.set_games(w.autoload("Library").games)
+	await w.frames(4)
+	ok(not is_instance_valid(tile) or not tile.is_visible_in_tree(), "the tile the sheet came from is gone")
+	await b()
+	await w.wait_s(0.5)
+	ok(not sheet_open(), "B closes the sheet")
+	ok(focus() != null and focus().is_visible_in_tree() and not sheet().is_ancestor_of(focus()),
+		"and focus is on the screen, not on a row of the closed sheet (%s)" % where())
+	await b()
+	await w.frames(3)
+	ok(focus() != null and focus().is_visible_in_tree(), "another B still leaves something focused (%s)" % where())
+	await without_stores()
+
+
 ## CUX-7: read-only cards on the device pages take no focus; the right stick
 ## scrolls them into view, and only while it is pushed.
 func test_read_only_device_cards_take_no_focus_and_the_right_stick_scrolls() -> void:

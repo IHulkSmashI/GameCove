@@ -1324,18 +1324,20 @@ func test_installer_dpad_order_on_every_custom_page() -> void:
 	for d in ["down", "right", "down", "left", "up", "right", "down"]:
 		await call(d)
 	eq(JSON.stringify(s.plan.choices), before, "Device: only moving about changed nothing")
-	# Summary: the focus starts on the first row, and Up from Install ends there
+	# Summary: the focus starts on the first row; Up from Install goes to the row right above it (CUX-5)
 	s.go("summary")
 	await w.frames(6)
 	var first: Control = focus()
 	ok(first != null and not focused_in(s.next_button), "Summary: focus starts in the list, not on Install")
 	var tries := 0
+	var last_row: Control = first
 	while not focused_in(s.next_button) and tries < 30:
+		last_row = focus()
 		await down()
 		tries += 1
 	ok(focused_in(s.next_button), "Summary: down reaches Install")
 	await up()
-	ok(focus() == first, "Summary: up from Install lands on the first row")
+	ok(focus() == last_row, "Summary: up from Install lands on the row right above it (%s)" % where())
 	# Extras: down through everything; the last row ends up on screen (scroll follows focus)
 	s.go("extras")
 	await w.frames(6)
