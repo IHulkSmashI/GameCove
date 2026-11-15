@@ -44,6 +44,7 @@ var game: Dictionary = {}
 ## Write successful changes into profile layers (off for previews).
 var autosave := true
 var _pending := {}     # id -> value we asked for
+var _out := {}         # id -> writes sent and not answered yet
 var _failed := {}      # id -> value that didn't take
 var _local := {}       # id -> Control (not in the registry)
 var _local_order: Array = []
@@ -341,6 +342,7 @@ func _set_value(id: String, v: Variant) -> bool:
 		changed.emit(id, nv)
 		return true
 	_pending[id] = v
+	_out[id] = int(_out.get(id, 0)) + 1
 	pending_changed.emit(id, true)
 	controls.set_value(id, v)
 	return true
@@ -358,6 +360,8 @@ func target_layer(id: String) -> Array:
 
 func _on_changed(id: String, v: Variant) -> void:
 	var mine := _pending.has(id)
+	if mine and _answer_is_early(id):
+		return
 	_pending.erase(id)
 	_failed.erase(id)
 	if mine:
@@ -366,7 +370,22 @@ func _on_changed(id: String, v: Variant) -> void:
 	changed.emit(id, v)
 
 
+## Several presses in a row each send a write, and each write is answered. Until the newest one is,
+## the row keeps showing what was asked for last: the answer to an earlier press put the row back a
+## step (A three times on a segmented choice ended one short) and saved a value nobody wanted kept.
+## True for such an early answer.
+func _answer_is_early(id: String) -> bool:
+	var left := int(_out.get(id, 1)) - 1
+	if left > 0:
+		_out[id] = left
+		return true
+	_out.erase(id)
+	return false
+
+
 func _on_failed(id: String, v: Variant) -> void:
+	if _pending.has(id) and _answer_is_early(id):
+		return
 	if _pending.has(id):
 		_pending.erase(id)
 		_failed[id] = v

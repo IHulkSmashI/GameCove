@@ -239,6 +239,33 @@ func test_view_unavailable_blocked_root_badges() -> void:
 	_done([c])
 
 
+## Three quick presses send three writes; the answers to the first two must not put the row back.
+func test_answers_to_earlier_presses_wait_for_the_newest() -> void:
+	var c := fake()
+	var p := _profiles(c)
+	p._first_detect_done = true
+	var m = _model(c, p)
+	var changes := []
+	var pend := []
+	m.changed.connect(func(id, v): changes.append([id, v]))
+	m.pending_changed.connect(func(id, on): pend.append(on))
+	c.defer = true
+	for v in [10, 12, 15]:
+		ok(m.set_value("power.tdp", v), "press: %d W" % v)
+	ok(m.is_pending("power.tdp"), "applying")
+	c.flush()
+	eq(changes.filter(func(x): return x[0] == "power.tdp"), [["power.tdp", 15.0]], "one change reaches the rows: the newest")
+	ok(not m.is_pending("power.tdp"), "answered")
+	eq(pend, [true, true, true, false], "applying until the last answer")
+	eq(p.layer("", "")["power.tdp"], 15, "and only that one is saved")
+	# back to one press, one answer
+	changes.clear()
+	ok(m.set_value("power.tdp", 11), "one more press")
+	c.flush()
+	eq(changes.filter(func(x): return x[0] == "power.tdp"), [["power.tdp", 11.0]], "a single press is answered as before")
+	c.defer = false
+
+
 func test_view_changes_pending_and_failure() -> void:
 	var c := fake()
 	var m = _model(c)
