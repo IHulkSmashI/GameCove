@@ -651,7 +651,7 @@ func finish() -> void:
 			# the full-width row's foot: whatever column control is below it, found at the press (Godot's
 			# own search skips what is scrolled below the fold, and the press did nothing)
 			c.focus_neighbor_bottom = NodePath()
-			Kit.lead_down([c], _below_action.bind(c))
+			Kit.lead_down([c], _below_action.bind(c, false))
 	if not post.is_empty():
 		Kit.link_rows(post, null)
 		for col in order:
@@ -702,14 +702,15 @@ func finish() -> void:
 var _col_chains := {}
 
 
-## The card control a press down from the action `a` reaches: the nearest one below it, in line
-## first; the page's first control when nothing is laid out yet.
-func _below_action(a: Control) -> Control:
+## The card control a press down from `a` (an action, or a full-width card's control) reaches: the
+## nearest one below it, in line first. `or_first`: the page's first control when none is below (the
+## action row before the page is laid out); without it the press stays (a card with nothing under it).
+func _below_action(a: Control, or_first := true) -> Control:
 	var live: Array = focusables.filter(func(c): return is_instance_valid(c) and (c as Control).is_visible_in_tree())
 	if live.is_empty():
 		return null
 	var to := Kit.nearest_toward(a, live, Vector2.DOWN)
-	return to if to != null else live[0]
+	return to if to != null or not or_first else live[0]
 
 
 func _on_card_input(event: InputEvent, c: Control) -> void:

@@ -514,10 +514,12 @@ func _link_games() -> void:
 
 ## Down from an action: the system picker sits right under the action row (its buttons are linked
 ## here, not in the page's chain), so the one in line with the action is where the press goes.
-func _below_action(a: Control) -> Control:
+func _below_action(a: Control, or_first := true) -> Control:
+	if a in picker_buttons:
+		return null   # the picker's own link leads into the grid (_link_games)
 	var live: Array = picker_buttons.filter(func(c): return is_instance_valid(c) and (c as Control).is_visible_in_tree())
-	if live.is_empty():
-		return super(a)
+	if live.is_empty() or not a in actions:
+		return super(a, or_first)
 	var to := Kit.nearest_toward(a, live, Vector2.DOWN)
 	return to if to != null else _current_pick()
 
