@@ -59,6 +59,7 @@ func hold(button: JoyButton, ms: int) -> void:
 	u.pressed = false
 	_send(u)
 	await w.frames(1)
+	await shot("Hold-" + Shots.button_name(button))
 
 
 ## A trigger pulled all the way and let go (LT = JOY_AXIS_TRIGGER_LEFT).
@@ -114,6 +115,7 @@ func tap(pos: Vector2) -> void:
 	u.pressed = false
 	_send(u)
 	await w.frames(2)
+	await shot("Tap")
 
 
 ## Taps the middle of `c` on screen.

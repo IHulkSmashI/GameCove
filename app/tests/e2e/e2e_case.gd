@@ -11,6 +11,7 @@ const TC := preload("res://scripts/ui/texts_controls.gd")
 const Matrix := preload("res://tests/devicematrix/matrix.gd")
 const Buttons := preload("res://scripts/device/buttons.gd")
 const ControlView := preload("res://scripts/ui/controls/control_view.gd")
+const Shots := preload("res://tests/e2e/ux_shots.gd")
 
 var w: RefCounted   # world.gd
 
@@ -76,6 +77,13 @@ func press(button: JoyButton, frames_down := 1) -> void:
 	u.pressed = false
 	_send(u)
 	await w.frames(1)
+	await shot(Shots.button_name(button))
+
+
+## The picture after an input, when the run renders walkthroughs (ux_shots.gd).
+func shot(what: String) -> void:
+	if Shots.on():
+		await Shots.take(w.tree, _current, what)
 
 
 func a() -> void:
@@ -143,6 +151,7 @@ func stick(axis: JoyAxis, value: float) -> void:
 	z.axis_value = 0.0
 	_send(z)
 	await w.frames(1)
+	await shot(Shots.axis_name(axis, value))
 
 
 ## The handheld's own button for a GameCove action ("home" | "quick_menu"),
@@ -158,6 +167,7 @@ func special(action: String) -> void:
 	c.monitor_line.call_deferred({"kind": "event", "path": path, "event": ev, "value": 1.0})
 	c.monitor_line.call_deferred({"kind": "event", "path": path, "event": ev, "value": 0.0})
 	await w.frames(3)
+	await shot("Guide" if action == "home" else "Quick-Access")
 
 
 func guide() -> void:

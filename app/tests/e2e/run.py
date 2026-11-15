@@ -144,6 +144,11 @@ def run_one(godot: str, work: str, info_path: str, extra: dict, timeout: int, la
     before = pids()
     t0 = time.time()
     cmd = [godot, "--headless", "--path", APP, "-s", "res://tests/e2e/run_e2e.gd"]
+    if extra.get("E2E_SHOTS"):
+        # one picture per press (tools/ux_walk/sheets.sh): a real renderer on a virtual screen of that size
+        size = extra["E2E_SHOTS_SIZE"]
+        cmd = ["xvfb-run", "-a", "-s", f"-screen 0 {size}x24", godot, "--path", APP, "--rendering-driver", "opengl3",
+               "--resolution", size, "--position", "0,0", "-s", "res://tests/e2e/run_e2e.gd"]
     try:
         p = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=timeout, check=False)
         out, err, code = p.stdout, p.stderr, p.returncode
@@ -209,6 +214,8 @@ def main(argv=None) -> int:
     ap.add_argument("--seed", type=int, default=0, help="first seed (default: from the clock, printed)")
     ap.add_argument("--godot", default="")
     ap.add_argument("--keep", action="store_true", help="keep the work folder")
+    ap.add_argument("--shots", default="", help="folder for one picture per press (needs xvfb-run; see tools/ux_walk/sheets.sh)")
+    ap.add_argument("--shots-size", default="1280x800", help="the screen the pictures are taken on, WIDTHxHEIGHT")
     ap.add_argument("--timeout", type=int, default=0)
     ap.add_argument("-v", "--verbose", action="store_true")
     a = ap.parse_args(argv)
@@ -244,6 +251,8 @@ def main(argv=None) -> int:
     for setup in setups:
         work, info_path = prepare(fixtures, manifest, setup, base)
         common = {"E2E_SEED": str(seed), "E2E_ITERS": str(iters), "E2E_TEST": a.test}
+        if a.shots:
+            common.update({"E2E_SHOTS": os.path.join(os.path.abspath(a.shots), setup), "E2E_SHOTS_SIZE": a.shots_size})
         suites = [s for s in a.suites.split(",") if s]
         if setup in skipped:
             continue

@@ -60,6 +60,24 @@ error, every settings file still parses, B and Guide always get back to Home (or
 menu opens within its budget. Behind-a-game budgets are `suite_perf.gd`'s (tight, measured), and every
 timer behind a game is in `test_timer_lint.gd`.
 
+### Pictures of a journey, one per press
+
+`tools/ux_walk/sheets.sh` plays the journeys with a real renderer (Xvfb) and saves the screen after every
+press, then lays the pictures out as numbered contact sheets (ImageMagick's `montage`), so a person can
+check a whole flow on a phone before any device test:
+
+```
+GODOT=$G tools/ux_walk/sheets.sh OUT                  # every journey, at 1920x1200 and 1280x800
+GODOT=$G tools/ux_walk/sheets.sh OUT first_boot       # the journeys whose name has "first_boot"
+GODOT=$G tools/ux_walk/sheets.sh OUT installer 1280x800 journeys,controller_ux
+```
+
+`OUT/<size>/sheets/<suite>__<test>-NN.png` are the sheets (nine pictures each, captioned with the press:
+`0007_Down`); `OUT/<size>/<setup>/<suite>__<test>/` has every picture at full size. The pictures come from
+`tests/e2e/ux_shots.gd`, which the input helpers call after each press only when `E2E_SHOTS` is set
+(`run.py --shots DIR --shots-size WxH`); the headless suites never pay for it. A journey that fails still
+leaves its pictures: they show where it went wrong.
+
 ## Running on the handhelds
 
 On each handheld (the testbed's `prepare` put the repo in `~/src/GameCove`; `console --keep` opened the
