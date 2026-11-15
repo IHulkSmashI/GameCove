@@ -108,7 +108,9 @@ func _init() -> void:
 	margin.add_theme_constant_override("margin_top", 88)
 	margin.add_theme_constant_override("margin_bottom", 58)
 	add_child(margin)
-	var root := Kit.vbox(10)
+	# 6, not 10: the 48 px touch targets made the two bars above the grid 12 px taller, which left a
+	# 1280x800 screen 5 px short of its second row of covers (one row and an empty band under it)
+	var root := Kit.vbox(6)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	margin.add_child(root)
 

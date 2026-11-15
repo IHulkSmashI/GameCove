@@ -163,6 +163,25 @@ func test_the_quick_menu_over_a_settings_sheet_leaves_focus_somewhere() -> void:
 	await w.frames(4)
 
 
+## The Library shows two whole rows of covers on the smallest layout (1280x800). The 48 px touch
+## targets made the bars above the grid taller and left it 5 px short: one row, and an empty band.
+func test_the_library_shows_two_rows_of_covers_on_the_smallest_screen() -> void:
+	await with_stores()
+	ok(await go_tab("library"), "Library with the pad")
+	await w.frames(6)
+	var lib: Control = main().screens["library"]
+	var view: Vector2 = w.tree.root.get_visible_rect().size
+	# what the bars around the grid take is the same on every height: on an 800 px screen the grid gets the rest
+	var chrome: float = view.y - lib._area.size.y
+	var pitch: float = lib.tile_size.y + lib.GAP.y
+	var two_rows: float = 2.0 * pitch + 2.0 * lib.PAD.y - lib.GAP.y
+	if view.x > 1281.0:
+		print("E2E NOTE library rows: a wider layout than 1280 (%s): covers are another size" % view)
+	else:
+		ok(800.0 - chrome >= two_rows, "two rows of covers (%d px) fit under the bars of a 1280x800 screen (the bars take %d px, leaving %d)" % [int(two_rows), int(chrome), int(800.0 - chrome)])
+	await without_stores()
+
+
 ## CUX-7: read-only cards on the device pages take no focus; the right stick
 ## scrolls them into view, and only while it is pushed.
 func test_read_only_device_cards_take_no_focus_and_the_right_stick_scrolls() -> void:
