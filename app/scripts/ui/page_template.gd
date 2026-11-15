@@ -679,14 +679,27 @@ func finish() -> void:
 	for i in range(1, actions.size()):
 		var a: Control = actions[i]
 		a.focus_neighbor_top = a.get_path_to(a)
-		# down from the other actions: the card control right below (Godot's search), not column 1's top
+		# down from the other actions: the card control right below, not column 1's top. Found at the
+		# press among the page's own controls: Godot's search skips whatever is scrolled below the fold,
+		# so on a short screen the press did nothing (CUX-5, CUX-9).
 		a.focus_neighbor_bottom = NodePath() if not focusables.is_empty() else a.get_path_to(a)
+		Kit.lead_down([a], _below_action.bind(a))
 		a.focus_neighbor_left = a.get_path_to(actions[i - 1])
 		a.focus_neighbor_right = a.get_path_to(actions[i + 1] if i + 1 < actions.size() else a)
 	_link_top_target()
 
 
 var _col_chains := {}
+
+
+## The card control a press down from the action `a` reaches: the nearest one below it, in line
+## first; the page's first control when nothing is laid out yet.
+func _below_action(a: Control) -> Control:
+	var live: Array = focusables.filter(func(c): return is_instance_valid(c) and (c as Control).is_visible_in_tree())
+	if live.is_empty():
+		return null
+	var to := Kit.nearest_toward(a, live, Vector2.DOWN)
+	return to if to != null else live[0]
 
 
 func _on_card_input(event: InputEvent, c: Control) -> void:
