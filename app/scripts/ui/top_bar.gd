@@ -75,6 +75,7 @@ func _init() -> void:
 		word.add_child(l)
 	add_child(word)
 	var gap := Control.new()
+	gap.name = "LogoGap"
 	gap.custom_minimum_size = Vector2(ThemeLib.SPACE_5, 0)
 	gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(gap)
@@ -498,15 +499,20 @@ func _draw() -> void:
 
 
 ## Five tabs, telemetry and the status pill can outgrow a 1280 px bar: then the
-## wordmark goes and the logo mark alone stays.
+## wordmark goes and the logo mark alone stays, and if that isn't enough (a pad's
+## battery in the pill, 48 px touch targets) the extra space after the logo goes too.
 func fit_width() -> void:
 	if not is_inside_tree():
 		return
 	var word: Control = get_node("Wordmark")
+	var gap: Control = get_node("LogoGap")
 	var room := get_viewport_rect().size.x - offset_left + offset_right
 	word.visible = true
+	gap.visible = true
 	if get_combined_minimum_size().x > room:
 		word.visible = false
+	if get_combined_minimum_size().x > room:
+		gap.visible = false
 
 
 func _notification(what: int) -> void:
