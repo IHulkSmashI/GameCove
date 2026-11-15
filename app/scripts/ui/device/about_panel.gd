@@ -102,7 +102,7 @@ func _g(section: String) -> Dictionary:
 func _fill_side() -> void:
 	var d := _g("device")
 	var sup := _g("support")
-	var hero := DKit.card("", "handheld", "accent", false)
+	var hero := DKit.card("", "handheld", "accent")
 	var hero_card: PanelContainer = hero[0]
 	hero_card.name = "Hero"
 	# The hero fills the column: the picture takes whatever height is left.
@@ -373,7 +373,7 @@ func _link() -> void:
 
 ## A read-only card; set_action() makes the ones with a job focusable.
 func _section(key: String, tint := "accent") -> Array:
-	var c := DKit.card(Texts.SECTIONS[key], Texts.SECTION_ICONS[key], tint, false)
+	var c := DKit.card(Texts.SECTIONS[key], Texts.SECTION_ICONS[key], tint)
 	c[0].name = "Card_" + key
 	return c
 

@@ -152,7 +152,7 @@ func _restore_focus(key: String, mark := {}) -> void:
 # ---- left: the picture ----------------------------------------------------------
 
 func _fill_side() -> void:
-	var hero := DKit.card("", "gamepad", "accent", false)
+	var hero := DKit.card("", "gamepad", "accent")
 	hero[0].name = "PictureCard"
 	hero[0].size_flags_vertical = Control.SIZE_EXPAND_FILL
 	Kit.drop(hero[1], hero[1].get_node("Head"))
@@ -273,7 +273,7 @@ func _shortcuts_card() -> Array:
 	var m := _model()
 	if not ShortcutsCard.wanted(m):
 		return []
-	var c := DKit.card(TS.BS_TITLE, "paddle", "accent", false)
+	var c := DKit.card(TS.BS_TITLE, "paddle", "accent")
 	c[0].name = "Card_shortcuts"
 	shortcuts = ShortcutsCard.new()
 	shortcuts.setup(m, {"controls": services.get("controls", CShared.autoload("Controls")), "controller": svc("controller")}, device_id, null)
@@ -297,7 +297,7 @@ func _gyro_controls_card() -> Array:
 		return []
 	var m = CModel.new()
 	m.setup(ctl, services.get("profiles", CShared.autoload("Profiles")))
-	var c := DKit.card(Texts.GYRO_TITLE, "motion", "info", false)
+	var c := DKit.card(Texts.GYRO_TITLE, "motion", "info")
 	c[0].name = "Card_gyro"
 	var out := []
 	for id in ["controller.gyro", "controller.emulation", "controller.gyro_accel"]:
@@ -320,7 +320,7 @@ func _gyro_card() -> Array:
 	var dev := svc("device")
 	var f: Dictionary = dev.features() if dev != null and dev.has_method("features") else {}
 	var hw := str(f.get("gyro", "unknown"))
-	var c := DKit.card(Texts.GYRO_TITLE, "motion", "info", not _supported("gyro"))
+	var c := DKit.card(Texts.GYRO_TITLE, "motion", "info")
 	c[0].name = "Card_gyro"
 	if _supported("gyro"):
 		# No Controls here: the old "mouse" / "stick" modes would write a
@@ -338,7 +338,7 @@ func _gyro_card() -> Array:
 
 
 func _rumble_card() -> Array:
-	var c := DKit.card(Texts.RUMBLE_TITLE, "sparkle", "accent", not _supported("rumble"))
+	var c := DKit.card(Texts.RUMBLE_TITLE, "sparkle", "accent")
 	c[0].name = "Card_rumble"
 	_cards.add_child(c[0])
 	if not _supported("rumble"):
@@ -376,7 +376,7 @@ func _game_card() -> Array:
 	if not _supported("per_game"):
 		return []
 	var game := str(state.get("game", ""))
-	var c := DKit.card(Texts.GAME_PROFILE_TITLE, "game", "accent", game == "")
+	var c := DKit.card(Texts.GAME_PROFILE_TITLE, "game", "accent")
 	c[0].name = "Card_game"
 	_cards.add_child(c[0])
 	if game == "":
@@ -390,7 +390,7 @@ func _game_card() -> Array:
 
 
 func _test_card() -> Array:
-	var c := DKit.card(Texts.TEST_TITLE, "gamepad", "good", false)
+	var c := DKit.card(Texts.TEST_TITLE, "gamepad", "good")
 	c[0].name = "Card_test"
 	c[1].add_child(DKit.quiet(Texts.TEST_LINE))
 	if str(state.get("game", "")) != "":
@@ -419,7 +419,7 @@ func hints_for(c: Control) -> Array:
 			return [Kit.change_hint(c), ["B", "Back"]]   # A on a switch, left / right on a stepper
 	if c is Button:
 		return [["A", c.text], ["B", "Back"]]
-	return [["DPAD", "Scroll"], ["B", "Back"]]
+	return scroll_hints()
 
 
 # ---- lighting buttons and the button test --------------------------------------------

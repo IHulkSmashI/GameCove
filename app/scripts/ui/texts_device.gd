@@ -4,6 +4,10 @@ extends RefCounted
 
 # ---- About this device ----------------------------------------------------------
 
+## Hint bar, on a device page whose focused control has no A of its own.
+const HINT_SCROLL := "Scroll"
+const HINT_BACK := "Back"
+
 const ABOUT_TITLE := "About this device"
 const SUPPORT_LABELS := {"full": "Tested on hardware", "partial": "Supported", "beta": "Beta support", "generic": "Basic support"}
 const SUPPORT_TONES := {"full": "good", "partial": "info", "beta": "info", "generic": "warn"}

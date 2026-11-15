@@ -183,7 +183,7 @@ func _fill_side() -> void:
 		if float(d.get("size", -1)) > 0 and float(d.get("used", -1)) >= 0:
 			total += float(d["size"])
 			used += float(d["used"])
-	var c := DKit.card("Free space", "download", "accent", false)
+	var c := DKit.card("Free space", "download", "accent")
 	c[0].name = "Summary"
 	if total > 0.0:
 		var big := Kit.label(Texts.bytes(total - used), "DisplayLabel")
@@ -209,7 +209,7 @@ func _upscaling_card() -> void:
 	var bundle := float(up.get("bundle_bytes", 0))
 	if up.is_empty() or (bytes <= 0.0 and bundle <= 0.0):
 		return
-	var c := DKit.card(TX.UPSCALE_STORE_TITLE, "gauge", "info", false)
+	var c := DKit.card(TX.UPSCALE_STORE_TITLE, "gauge", "info")
 	c[0].name = "UpscalingFiles"
 	var games := int(up.get("games", 0))
 	var size := Kit.label(TX.UPSCALE_STORE_SIZE % Texts.bytes(bytes), "")
@@ -236,7 +236,7 @@ func _clean_card() -> void:
 	if st == null or not st.has_method("clean_leftovers"):
 		return
 	var cl: Dictionary = state.get("cleanup", {}) if state.get("cleanup") is Dictionary else {}
-	var c := DKit.card(TX.CLEAN_TITLE, "sparkle", "good", false)
+	var c := DKit.card(TX.CLEAN_TITLE, "sparkle", "good")
 	c[0].name = "CleanUp"
 	var dirs: Array = cl.get("dirs", []) if cl.get("dirs") is Array else []
 	var bytes := float(cl.get("bytes", 0))
@@ -359,4 +359,4 @@ func start_clean() -> void:
 func hints_for(c: Control) -> Array:
 	if c is Button:
 		return [["A", c.text], ["B", "Back"]]
-	return [["DPAD", "Scroll"], ["B", "Back"]]
+	return scroll_hints()

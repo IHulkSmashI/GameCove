@@ -12,9 +12,10 @@ const PAD_Y := 14
 
 
 ## A card tinted by its section's colour, with one accent ring when focused.
-## Read-only cards on About this device don't take focus; one with something
-## to do (set_action) does, shows "(A) Copy info" in its header, and runs it
-## on A.
+## Read-only cards take no focus, on any device page (docs/CONTROLLER-UX.md
+## CUX-7): the right stick scrolls them into view (device_panel.gd). One with
+## something to do (set_action) takes focus, shows "(A) Copy info" in its
+## header, and runs it on A.
 class FocusCard extends PanelContainer:
 	var tint := ""        # theme token ("accent", "info", "good", "warn") or ""
 	var focusable := true
@@ -67,11 +68,11 @@ class FocusCard extends PanelContainer:
 		_pill.add_theme_stylebox_override("panel", ThemeLib.box(ThemeLib.soft(0.10), 999, 10, 3))
 		_pill.modulate.a = 1.0 if on else 0.0
 
-	func _init(tint_token := "", can_focus := true) -> void:
+	func _init(tint_token := "") -> void:
 		tint = tint_token
-		focusable = can_focus
-		focus_mode = Control.FOCUS_ALL if can_focus else Control.FOCUS_NONE
-		mouse_filter = Control.MOUSE_FILTER_STOP if can_focus else Control.MOUSE_FILTER_IGNORE
+		focusable = false
+		focus_mode = Control.FOCUS_NONE
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
 		size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		focus_entered.connect(queue_redraw)
 		focus_exited.connect(queue_redraw)
@@ -145,8 +146,8 @@ class UsageBar extends Control:
 
 
 ## [card, column] with a header row: tinted icon + title, optional chip at the right.
-static func card(title: String, icon: String, tint := "accent", can_focus := true) -> Array:
-	var c := FocusCard.new(tint, can_focus)
+static func card(title: String, icon: String, tint := "accent") -> Array:
+	var c := FocusCard.new(tint)
 	c.name = "Card_" + title.validate_node_name().replace(" ", "")
 	var col := Kit.vbox(10)
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE

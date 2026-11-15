@@ -187,7 +187,7 @@ func _history_card() -> Array:
 	var list: Array = fx.history()
 	if list.is_empty():
 		return []
-	var c := DKit.card(TF.HISTORY_TITLE, "update", "info", true)
+	var c := DKit.card(TF.HISTORY_TITLE, "update", "info")
 	var card: PanelContainer = c[0]
 	card.name = "History"
 	var focus: Array = []
@@ -221,7 +221,7 @@ func _history_card() -> Array:
 
 
 func _fill_side() -> void:
-	var c := DKit.card(TF.SUMMARY_TITLE, "handheld", "accent", false)
+	var c := DKit.card(TF.SUMMARY_TITLE, "handheld", "accent")
 	c[0].name = "Summary"
 	var name_l := Kit.label(_device_name(), "HeaderLabel", true)
 	name_l.name = "DeviceName"
@@ -261,7 +261,7 @@ func _changes_card(fx: Object) -> void:
 	var ch: Dictionary = fx.last_changes if fx.get("last_changes") is Dictionary else {}
 	if ch.is_empty():
 		return
-	var c := DKit.card(TF.CHANGES_TITLE, "update", "info", false)
+	var c := DKit.card(TF.CHANGES_TITLE, "update", "info")
 	c[0].name = "Changes"
 	var list: Array = ch.get("changed", [])
 	if bool(ch.get("first_run", false)):
@@ -290,7 +290,7 @@ func _fix_card(r: Dictionary) -> Array:
 	var harmful: bool = r.get("harmful", false)
 	# one that clashes with the system's own fix while it waits for the password: said loudly
 	var tone := "bad" if harmful else TF.status_tone(status)
-	var c := DKit.card(r["title"], _icon_for(r), tone if tone != "" else "accent", true)
+	var c := DKit.card(r["title"], _icon_for(r), tone if tone != "" else "accent")
 	var card: PanelContainer = c[0]
 	card.name = "Fix_" + id.validate_node_name()
 	var col: VBoxContainer = c[1]
@@ -523,9 +523,9 @@ static func _icon_for(r: Dictionary) -> String:
 func hints_for(c: Control) -> Array:
 	for k in buttons:
 		if buttons[k] == c and k.begins_with("panel:"):
-			return [["DPAD", "Scroll"], ["B", "Back"]]
+			return scroll_hints()
 		if buttons[k] == c:
 			var verb: String = k.substr(0, k.find(":"))
 			var label: String = (buttons[k] as Button).text
 			return [["A", {"apply": TF.APPLY, "undo": TF.UNDO, "check": TF.CHECK}.get(verb, label)], ["B", "Back"]]
-	return [["DPAD", "Scroll"], ["B", "Back"]]
+	return scroll_hints()

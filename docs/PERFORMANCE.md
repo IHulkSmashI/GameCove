@@ -134,7 +134,11 @@ tiny sysfs reads) runs on start, on window resize and on focus-in only: no Timer
   the game's own frame time barely moves; GameCove's part is one thread blocked on the
   recorder's output pipe (no timer, no polling). The Clips list, the Apps scan and the
   controller batteries (UPower) are read on events while GameCove is in front, never behind
-  a game. The Send to phone page runs per frame only while its code shows on screen.
+  a game. The Send to phone page runs per frame only while its code shows on screen. A
+  device page in Settings (About, Fixes, Storage, Updates) runs per frame only while the
+  right stick is held to scroll its cards: letting go, leaving the page or opening anything
+  over it stops it (`device_panel.gd`; `suite_controller_ux.gd` checks that nothing ticks
+  while the stick rests).
 
 - **The quick menu's This game** is built once when a game starts and brought up to date
   once when the game's window takes the screen, then waits hidden. Hidden, its rows do no

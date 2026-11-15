@@ -720,7 +720,7 @@ func _saves_shots() -> void:
 		bg.z_index = 50
 		bg.set_meta("ux_no_walk", "a picture of one card for the docs, drawn over the app")
 		main.add_child(bg)   # main's theme (fonts, colours)
-		var c: Array = DKit.card(TD.SECTIONS["history"], TD.SECTION_ICONS["history"], "good", false)
+		var c: Array = DKit.card(TD.SECTIONS["history"], TD.SECTION_ICONS["history"], "good")
 		c[0].position = Vector2(48, 48)
 		c[0].custom_minimum_size = Vector2(root.size.x * 0.5, 0)
 		var body = load("res://scripts/ui/device/battery_history.gd").new()

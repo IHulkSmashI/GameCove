@@ -123,7 +123,7 @@ func _fill() -> void:
 
 func _fill_side() -> void:
 	var info: Dictionary = state.get("os_info", {}) if state.get("os_info") is Dictionary else {}
-	var c := DKit.card("This system", "info", "accent", false)
+	var c := DKit.card("This system", "info", "accent")
 	c[0].name = "Summary"
 	var name_l := Kit.label(str(info.get("name", Texts.UNKNOWN)), "HeaderLabel", true)
 	name_l.name = "OsName"
@@ -432,4 +432,4 @@ func focus_chain() -> Array:
 func hints_for(c: Control) -> Array:
 	if c is Button:
 		return [["A", c.text], ["B", "Back"]]
-	return [["DPAD", "Scroll"], ["B", "Back"]]
+	return scroll_hints()

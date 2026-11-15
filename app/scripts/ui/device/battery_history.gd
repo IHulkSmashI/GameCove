@@ -20,7 +20,7 @@ class Chart extends Control:
 
 	func _init() -> void:
 		name = "Chart"
-		custom_minimum_size = Vector2(0, 170)
+		custom_minimum_size = Vector2(0, CHART_H)
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	func set_data(pts: Array, from: int, to: int) -> void:
@@ -82,6 +82,12 @@ class Chart extends Control:
 
 var chart: Chart
 var empty_label: Label
+## The card is one stop for the pad (A opens Power settings), so all of it has to
+## fit the page's scroll area on the shortest layout, 1280x800 (CUX-8): the
+## chart's height and how many games the drain table lists are sized for that.
+const CHART_H := 150.0
+const DRAIN_ROWS := 6
+
 var table: GridContainer
 var drain_empty: Label
 
@@ -132,7 +138,7 @@ func setup(history: Object, now: int) -> void:
 		var l := Kit.micro(h)
 		l.add_theme_color_override("font_color", ThemeLib.color("text_3"))
 		table.add_child(l)
-	for r in rows.slice(0, 8):
+	for r in rows.slice(0, DRAIN_ROWS):
 		var t := Kit.label(str(r["title"]))
 		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		t.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
