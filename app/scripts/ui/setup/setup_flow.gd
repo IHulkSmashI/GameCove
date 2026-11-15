@@ -782,9 +782,13 @@ func _link() -> void:
 	if step == "theme":
 		_link_grid(chain)
 	elif step == "art":
-		Kit.link_horizontal(chain)  # the fallbacks sit in one row
+		# the fallbacks sit in one row that wraps onto a second line on a narrow screen: left / right
+		# along a line, up / down between the lines, by where they sit at the press (CUX-5)
+		Kit.link_rows(chain)
 		for c in chain:
-			c.focus_neighbor_top = c.get_path_to(c)
+			for side in ["focus_neighbor_left", "focus_neighbor_right"]:
+				if c.get(side) == NodePath():
+					c.set(side, c.get_path_to(c))   # a line's end stays
 	else:
 		Kit.link_vertical(chain)
 	var last: Control = chain[-1] if not chain.is_empty() else null
