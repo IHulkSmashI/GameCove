@@ -648,7 +648,10 @@ func finish() -> void:
 			Kit.link_rows(cols[col], top)
 	for c in pre:
 		if c.get_node_or_null(c.focus_neighbor_bottom) == c:
-			c.focus_neighbor_bottom = NodePath()   # the full-width row's foot: whatever column control is below it
+			# the full-width row's foot: whatever column control is below it, found at the press (Godot's
+			# own search skips what is scrolled below the fold, and the press did nothing)
+			c.focus_neighbor_bottom = NodePath()
+			Kit.lead_down([c], _below_action.bind(c))
 	if not post.is_empty():
 		Kit.link_rows(post, null)
 		for col in order:
