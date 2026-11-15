@@ -266,6 +266,7 @@ func pick(id: String) -> void:
 		if f != null:
 			f.release_focus()
 		focus_lost.emit()
+		_fallback_focus.call_deferred()
 
 
 func close(restore_focus := true) -> void:
@@ -288,10 +289,45 @@ func close(restore_focus := true) -> void:
 			f.release_focus()
 		if f == null or is_ancestor_of(f):
 			focus_lost.emit()
+			_fallback_focus.call_deferred()
 
 
 func is_open() -> bool:
 	return _open
+
+
+## After focus_lost: a host that listens has put focus somewhere by now. Where nobody does (a
+## Settings page with a sheet of its own, whose pick rebuilt the row it came from), focus goes to the
+## open tab or category of the sheet's host, else its first control: never nowhere (CUX-6).
+func _fallback_focus() -> void:
+	if _open or not is_inside_tree():
+		return
+	var f := get_viewport().gui_get_focus_owner()
+	if f != null and f.is_visible_in_tree() and not is_ancestor_of(f):
+		return
+	var found: Array = []
+	_focusables_beside(get_parent(), found)
+	var to: Control = null
+	for c in found:
+		if c is BaseButton and (c as BaseButton).toggle_mode and (c as BaseButton).button_pressed:
+			to = c
+			break
+	if to == null and not found.is_empty():
+		to = found[0]
+	if to != null:
+		to.grab_focus()
+
+
+func _focusables_beside(n: Node, out: Array) -> void:
+	if n == null or n == self:
+		return
+	for ch in n.get_children():
+		if ch == self or (ch is CanvasItem and not (ch as CanvasItem).visible):
+			continue
+		if ch is Control and (ch as Control).focus_mode == Control.FOCUS_ALL and (ch as Control).is_visible_in_tree() \
+				and not (ch is BaseButton and (ch as BaseButton).disabled):
+			out.append(ch)
+		_focusables_beside(ch, out)
 
 
 func _input(event: InputEvent) -> void:
