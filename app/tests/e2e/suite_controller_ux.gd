@@ -209,6 +209,33 @@ func test_the_hint_for_a_row_says_what_it_really_does() -> void:
 	await w.frames(2)
 
 
+## CUX-8: a Settings row shows its help line when it takes focus; the page scrolls so the whole
+## row, help included, stays clear of the fade at the foot ("More below").
+func test_a_focused_settings_row_is_clear_of_the_foot_fade() -> void:
+	ok(await open_settings("power"), "Settings > Power with the pad")
+	var s: Control = main().settings
+	var sc: ScrollContainer = s._scroll
+	var fs: Node = sc.get_node("FocusScroll")
+	var seen := 0
+	for i in 14:
+		await down()
+		await w.wait_s(0.35)   # the help line is in and the glide is over
+		var f := focus()
+		if f == null or not sc.is_ancestor_of(f):
+			break
+		var bar := sc.get_v_scroll_bar()
+		if bar.max_value - bar.page - bar.value <= 1.0:
+			break   # the page's end: nothing fades below it
+		var row: Control = fs._row_of(f, sc.get_child(0))
+		var bottom := row.get_global_rect().end.y
+		var clear := sc.get_global_rect().end.y - 28.0
+		if row.size.y + 66.0 > sc.size.y:
+			continue   # taller than the page shows: its top comes first
+		seen += 1
+		ok(bottom <= clear + 1.0, "row %d (%s): its foot at %d is above the fade, which starts at %d" % [i, row.name, int(bottom), int(clear)])
+	ok(seen >= 4, "walked rows with more below them (%d)" % seen)
+
+
 ## CUX-7: read-only cards on the device pages take no focus; the right stick
 ## scrolls them into view, and only while it is pushed.
 func test_read_only_device_cards_take_no_focus_and_the_right_stick_scrolls() -> void:

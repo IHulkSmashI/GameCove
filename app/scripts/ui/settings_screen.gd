@@ -260,7 +260,9 @@ func _build() -> void:
 
 	_scroll = ScrollContainer.new()
 	_scroll.name = "Scroll"
-	FocusScroll.attach(_scroll)
+	# 48 px under the focused row: the foot fades out over 28 px and "More below" sits on it, so a
+	# row's help line (it appears with focus) stopped under the fade with the usual 18 (CUX-8)
+	FocusScroll.attach(_scroll, 48.0)
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
