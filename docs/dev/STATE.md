@@ -10,6 +10,7 @@ Each session takes the top unchecked milestone, finishes it and ticks it here. L
   - The gyro fix is applied. ClawDeck's InputPlumber device file was moved to `/var/lib/clawdeck-backup-<time>/`; to restore it, move it back to `/etc/inputplumber/devices.d/`.
   - No other fix and no boot choice is applied, so it still boots as before.
 - **ClawDeck** (`github.com/IHulkSmashI/ClawDeck`, AGPLv3, all the owner's own work, so its code may come into GameCove under GPL-3.0): port from it instead of writing again. All of it applies to the MSI Claw 8 EX; most of it to other Intel handhelds with XMX (not the Claw-only fixes, such as the VRR one). Look first at `docs/HARDWARE-FINDINGS.md`, `py_modules/clawdeck` and `tools/` (gyro, cabinet-lzms, upstream watch).
+- **GameCove-data** (`github.com/IHulkSmashI/GameCove-data`) is the second repo: it publishes the signed data the app downloads (upscalers, firmware, fixes, the game database, device photos) from its own workflows. A change to what those releases hold is made there, not here; the app's side is `packaging/helpers/gamecove_upscale/mirror.py` and the `*_index` tests.
 - **CI runs once per push:** on pull requests and on pushes to main; a newer push to a pull request cancels the older run. Sessions' commits (authored as `claude`) are on the CLA allowlist.
 
 ## Milestones
@@ -18,7 +19,7 @@ Each session takes the top unchecked milestone, finishes it and ticks it here. L
   - New: `tools/ux_walk/sheets.sh` (one picture per press, contact sheets). Found on the way and fixed: a Library lookup race that could abort the app, and quick repeated presses on a setting ending one step short.
   - Left: the walk can't finish its reachability pass on pages that rebuild while it walks (device tabs, Deals' store); a Details block on the Fixes page still takes focus to be read.
 - [x] **M2 Installer** (2026-11-15). `fix/installer-pad` merged; no focus-walk finding left on any installer page.
-  - Up from Skip / Back / Continue goes to the control right above; the installer has the 48 px targets when it runs on its own; monkey seeds 121003 (a sheet whose tile was rebuilt) and 128004 are tests now.
+  - Up from Skip / Back / Continue goes to the control right above; the installer has the 48 px targets when it runs on its own; monkey seeds 121003 (a sheet whose tile was rebuilt), 163003 (a cancelled Library search) and 164002 / 128004 (a sheet's pick that rebuilds its page) are fixed and are tests now.
   - The device findings it addresses:
     1. Closing the terminal kills the installer.
     2. Welcome cards: double highlight, and A moves on.
@@ -36,8 +37,9 @@ Each session takes the top unchecked milestone, finishes it and ticks it here. L
 - [ ] **M4 Release v0.1.1.**
   1. Short external review of the diff since `5c8fa49`.
   2. The version is bumped and `packaging/release-notes/v0.1.1.md` is on main (from `fix/installer-pad`); add this session's fixes to the notes.
-  3. Run release.yml with publish and prerelease on.
-  4. The owner approves the release in a browser.
+  3. Before tagging, run the monkey locally with the seeds the next two CI runs will use (`--suites monkey --seed <run number>`): the seed is the run number, and a new one has found a real focus bug three times.
+  4. Run release.yml with publish and prerelease on.
+  5. The owner approves the release in a browser.
 - [ ] **M5 Device tests.**
   1. Claw: re-run the installer over the half install (one password), boot into GameCove, then `tools/devicetest/devicetest.sh run --allow-install-game`.
   2. ROG Ally (SteamOS).
