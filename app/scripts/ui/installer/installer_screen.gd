@@ -174,6 +174,11 @@ func prefetch_photo() -> bool:
 ## as the app (1920x1200 lays out at 1536x960), so the installer's type
 ## matches the main screens.
 func _enter_tree() -> void:
+	# The theme, when nothing above gives one: run on its own the installer builds it in _ready, but a
+	# screen made with create() and put under the window had none, and every control wore the engine's
+	# own focus look (a white square frame) instead of ours.
+	if theme == null and not _themed_above():
+		theme = ThemeLib.build()
 	# 48 px touch targets (CUX-13), as in the app: the installer also runs on its own, without main.gd
 	if get_tree().root.find_child("TouchTargets", true, false) == null:
 		add_child(TouchTargets.attach(get_tree()), false, Node.INTERNAL_MODE_BACK)
@@ -219,6 +224,15 @@ func _ready() -> void:
 		"launcher": _svc("Launcher"), "device": dev, "power_cfg": "user://power.cfg", "ui_prefs": true,
 		"photo": _svc("DevicePhoto")}, t, p, inst)
 	focus_first()
+
+
+func _themed_above() -> bool:
+	var p := get_parent()
+	while p != null:
+		if (p is Control and (p as Control).theme != null) or (p is Window and (p as Window).theme != null):
+			return true
+		p = p.get_parent()
+	return false
 
 
 func _svc(n: String) -> Node:

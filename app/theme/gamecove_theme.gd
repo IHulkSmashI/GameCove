@@ -161,6 +161,12 @@ static func focus_ring(r := -1, col: Color = Color(0, 0, 0, 0), width := 2, glow
 	return s
 
 
+## Focus on a card that is one choice among several (a set-up mode, a look, a store): the ring
+## colour, 3 px, with the glow, a little outside the card. One look for every such card.
+static func card_focus(r: int) -> StyleBoxFlat:
+	return focus_ring(r, color("ring"), 3, true)
+
+
 ## Focus on a primary pill: white inner border, a 3 px gap in `bg`, the 3 px
 ## ring and a wide glow (theme/primary_focus.gd).
 static func primary_focus() -> StyleBox:

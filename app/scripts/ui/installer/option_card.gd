@@ -179,7 +179,7 @@ func _restyle() -> void:
 		add_theme_stylebox_override(st, base)
 	for st in ["hover", "hover_pressed"]:
 		add_theme_stylebox_override(st, hover)
-	add_theme_stylebox_override("focus", ThemeLib.focus_ring(r + 4, ThemeLib.color("accent"), 3))
+	add_theme_stylebox_override("focus", ThemeLib.card_focus(r + 4))
 	_styling = false
 
 

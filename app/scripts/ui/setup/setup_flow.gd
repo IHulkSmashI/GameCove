@@ -463,7 +463,9 @@ func _build_theme() -> void:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		for st in ["normal", "hover", "pressed", "hover_pressed", "disabled"]:
 			b.add_theme_stylebox_override(st, StyleBoxEmpty.new())
-		b.add_theme_stylebox_override("focus", ThemeLib.focus_ring(ThemeLib.radius("m") + 4, ThemeLib.color("text"), 3))
+		# the same focus as every card: the ring colour with its glow (it was a white frame here, next
+		# to a selected card outlined in the accent, which read as two highlights)
+		b.add_theme_stylebox_override("focus", ThemeLib.card_focus(ThemeLib.radius("m") + 4))
 		var only: Control = Appearance.preview(id)
 		Kit.fill(only)
 		b.add_child(only)

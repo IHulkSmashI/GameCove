@@ -4,6 +4,7 @@ extends "res://scripts/ui/settings/page.gd"
 ## applies, so every change goes out through host.changed(key, value).
 
 const Themes := preload("res://theme/themes.gd")
+const Icons := preload("res://scripts/ui/icons.gd")
 const Texts := preload("res://scripts/ui/texts.gd")
 
 var swatches: HBoxContainer
@@ -120,10 +121,30 @@ static func mark(row: HBoxContainer, id: String) -> void:
 		mark_one(p, String(p.name) == id)
 
 
-## Ring (or not) on one preview, named after its theme id.
+## Marks one preview (named after its theme id) as the look in use, or not. Selected is a thin edge
+## in that look's accent and a tick beside its name: never a thick ring, which is what focus wears
+## (docs/CONTROLLER-UX.md CUX-2).
 static func mark_one(p: Control, on: bool) -> void:
 	var t: Dictionary = Themes.get_theme(p.name)
 	var sb := ThemeLib.box(t["bg"], ThemeLib.radius("m"), 10, 10)
-	sb.border_color = t["accent"] if on else Color(1, 1, 1, 0.10)
-	sb.set_border_width_all(3 if on else 1)
+	sb.border_color = Color(t["accent"], 0.7) if on else Color(1, 1, 1, 0.10)
+	sb.set_border_width_all(1)
 	p.add_theme_stylebox_override("panel", sb)
+	var col := p.get_child(0) if p.get_child_count() > 0 else null
+	var name_row: Node = col.get_child(col.get_child_count() - 1) if col != null and col.get_child_count() > 0 else null
+	if name_row == null:
+		return
+	var tick: Control = name_row.get_node_or_null("Selected")
+	if tick == null and on:
+		var gap := Control.new()
+		gap.name = "SelectedGap"
+		gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		name_row.add_child(gap)
+		tick = Icons.rect("check", 16, t["accent"])
+		tick.name = "Selected"
+		tick.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		tick.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		name_row.add_child(tick)
+	if tick != null:
+		tick.visible = on

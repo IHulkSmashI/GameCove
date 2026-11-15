@@ -51,6 +51,36 @@ func test_a_device_page_leaves_read_only_cards_out_and_names_the_right_stick() -
 	panel.free()
 
 
+## CUX-2: the look in use is a thin edge and a tick; a thick ring in the accent is focus and nothing else.
+func test_a_selected_look_is_a_tick_not_a_ring() -> void:
+	var Appearance: Script = load("res://scripts/ui/settings/appearance_page.gd")
+	var p: Control = Appearance.preview("cove")
+	Appearance.mark_one(p, true)
+	var sb := p.get_theme_stylebox("panel") as StyleBoxFlat
+	ok(sb.border_width_left <= 1, "selected: a thin edge (%d px), never a ring" % sb.border_width_left)
+	var tick: Control = p.find_child("Selected", true, false)
+	ok(tick != null and tick.visible, "selected: a tick beside the name")
+	Appearance.mark_one(p, false)
+	ok(not tick.visible, "not selected: no tick")
+	ok((p.get_theme_stylebox("panel") as StyleBoxFlat).border_width_left <= 1, "and the same thin edge")
+	Appearance.mark_one(p, true)
+	eq(p.find_children("Selected", "", true, false).size(), 1, "marking again adds no second tick")
+	p.free()
+
+
+## CUX-1: every card that is one choice among several wears the same focus (ring colour, 3 px, glow).
+func test_choice_cards_share_one_focus_look() -> void:
+	var ThemeLib: Script = load("res://theme/gamecove_theme.gd")
+	var want: StyleBoxFlat = ThemeLib.card_focus(12)
+	eq(want.border_color, ThemeLib.color("ring"), "the ring colour")
+	eq(want.border_width_left, 3, "3 px")
+	ok(want.shadow_size > 0, "with the glow")
+	var OptionCard: Script = load("res://scripts/ui/installer/option_card.gd")
+	var src := FileAccess.get_file_as_string("res://scripts/ui/installer/option_card.gd") + FileAccess.get_file_as_string("res://scripts/ui/setup/setup_flow.gd")
+	ok(OptionCard != null and src.count("ThemeLib.card_focus(") == 2, "the installer's cards and first boot's looks both use it")
+	ok(not 'focus_ring(ThemeLib.radius("m") + 4, ThemeLib.color("text")' in src, "no white frame of their own")
+
+
 func test_up_and_down_leads_share_one_control() -> void:
 	var a := Button.new()
 	var b := Button.new()

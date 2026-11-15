@@ -1210,6 +1210,10 @@ func open_installer(t: Dictionary) -> Control:
 	await w.frames(4)
 	s.focus_first()
 	await w.frames(2)
+	# made outside the app's tree: it brings its own theme, so focus looks as it does everywhere else
+	ok(s.theme != null, "the installer has a theme wherever it is opened")
+	ok(str((s.next_button.get_theme_stylebox("focus").get_script() as Script).resource_path if s.next_button.get_theme_stylebox("focus").get_script() != null else "").ends_with("primary_focus.gd"),
+		"its primary button wears the pill ring, not the engine's square frame")
 	return s
 
 
