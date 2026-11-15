@@ -43,6 +43,12 @@ Each session takes the top unchecked milestone, finishes it and ticks it here. L
   3. Before tagging, run the monkey locally with the seeds the next two CI runs will use (`--suites monkey --seed <run number>`): the seed is the run number, and a new one has found a real focus bug three times.
   4. Run release.yml with publish and prerelease on.
   5. The owner approves the release in a browser.
+- [ ] **M4b UI polish** (asked by the owner on 2026-11-15; its own session, after the v0.1.1 tag so device testing isn't held up).
+  1. Nothing focused is ever cut: the focus ring and its glow (28 px on primary pills) must fit inside the screen and inside any scroll area. Teach the focus walk to measure the glow, not only the ring, then fix what it finds.
+  2. Scroll areas at 1280x800 slice their last card or row (installer Stores cards, Summary rows, the Manage sheet): make them end on a whole row, or fade the edge and show a scroll hint.
+  3. Button sizes and positions: one height and one corner radius per button kind, and action rows lined up the same way on every screen.
+  4. Send the owner full-size PNG pictures, not small JPEG sheets (the sheets looked pixelated because they were shrunk; check sharpness on the real 1920x1200 panel in M5).
+  5. Smoothness and power on the device: frame times of scrolling and opening the quick menu on the Claw, and whether running GameCove on the efficiency cores behind a game is worth it (`docs/PERFORMANCE.md` has the numbers from CI; nothing pins the app's own cores today).
 - [ ] **M5 Device tests.**
   1. Claw: re-run the installer over the half install (one password), boot into GameCove, then `tools/devicetest/devicetest.sh run --allow-install-game`.
   2. ROG Ally (SteamOS).
