@@ -86,6 +86,7 @@ func setup(title: String, current: String) -> void:
 	strip.name = "Swatches"
 	strip.flat = true
 	strip.focus_mode = Control.FOCUS_ALL
+	strip.set_meta("ux_stepper", true)   # the focus walk: left / right pick the swatch beside (CUX-3)
 	strip.custom_minimum_size = Vector2(0, 44)
 	strip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for st in ["focus", "normal", "hover", "pressed", "hover_pressed"]:

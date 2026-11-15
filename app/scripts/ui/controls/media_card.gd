@@ -105,7 +105,8 @@ func _show(st: Dictionary) -> void:
 		b.pressed.connect(func(): press(action))
 		row.add_child(b)
 		buttons[action] = b
-	Kit.link_horizontal([buttons["Previous"], buttons["PlayPause"], buttons["Next"]])
+		# a player that can't skip: the button shows it and takes no focus (CUX-7)
+		b.focus_mode = Control.FOCUS_ALL if spec[3] else Control.FOCUS_NONE
 	# the side buttons leave up / down the way the middle one does (siblings: same paths)
 	var mid: Button = buttons["PlayPause"]
 	for side in [buttons["Previous"], buttons["Next"]]:
@@ -114,12 +115,20 @@ func _show(st: Dictionary) -> void:
 			sb.focus_neighbor_top = mid.focus_neighbor_top
 			sb.focus_neighbor_bottom = mid.focus_neighbor_bottom)
 	_col.add_child(row)
+	link_row()
 	var help := Kit.label(TX.MEDIA_HELP, "QuietLabel", true)
 	help.name = "MediaHelp"
 	help.add_theme_color_override("font_color", ThemeLib.color("text_3"))
 	_col.add_child(help)
 	rebuilt.emit()
 	KeepFocus.restore(self, mark, _buttons_in_order(), buttons["PlayPause"])
+
+
+## Left / right along Previous, Play / Pause, Next. The quick menu calls it
+## after it chains its rows top to bottom (that chain makes left / right stay
+## on the one button it knows, Play / Pause).
+func link_row() -> void:
+	Kit.link_horizontal(_buttons_in_order().filter(func(b): return not b.disabled))
 
 
 func _buttons_in_order() -> Array:

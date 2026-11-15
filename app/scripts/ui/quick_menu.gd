@@ -702,6 +702,10 @@ func _relink() -> void:
 			_focusables.append(p)
 	_focusables = _focusables.filter(func(f): return is_instance_valid(f))
 	Kit.link_vertical(_focusables, tabs[section])
+	# a part with a row of its own (Now playing's Previous / Play / Next): left / right along it
+	for p in _parts:
+		if is_instance_valid(p) and p.has_method("link_row"):
+			p.link_row()
 	for t in tabs:
 		t.focus_neighbor_bottom = t.get_path_to(_focusables[0] if not _focusables.is_empty() else t)
 	_link_strip()
