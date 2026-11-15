@@ -66,3 +66,132 @@ func test_a_switch_changes_on_a_and_not_on_left_or_right() -> void:
 	await a()
 	await w.frames(2)
 	eq(s.rows["reduce_motion"].value(), before, "A again puts it back")
+
+
+## CUX-6: the Steam hand-off panel keeps focus while it is up, and gives it back
+## when it closes. It fades out, so it is still drawn for a moment after closing:
+## focus it took back then went away with it and nothing was focused.
+func test_the_steam_hand_off_panel_gives_focus_back_when_it_closes() -> void:
+	ok(await go_tab("library"), "Library with the pad")
+	await w.frames(3)
+	var o: Control = main().steam_overlay
+	main()._on_external_window("", "steam", "install")
+	await w.frames(4)
+	ok(o.is_open() and focus() != null and o.is_ancestor_of(focus()), "the panel is up and has focus (%s)" % where())
+	for p in ["up", "left", "down", "right"]:
+		await call(p)
+		ok(focus() != null and o.is_ancestor_of(focus()), "after %s, focus is still in the panel (%s)" % [p, where()])
+	o.close()
+	await w.wait_s(0.6)   # its fade is over
+	ok(not o.visible, "the panel is gone")
+	ok(focus() != null and focus().is_visible_in_tree() and not o.is_ancestor_of(focus()),
+		"and something on the screen has focus (%s)" % where())
+	eq(focus_on_screen(), "", "which is on screen")
+
+
+## CUX-7: read-only cards on the device pages take no focus; the right stick
+## scrolls them into view, and only while it is pushed.
+func test_read_only_device_cards_take_no_focus_and_the_right_stick_scrolls() -> void:
+	ok(await open_settings("device"), "Settings > Device with the pad")
+	var s: Control = main().settings
+	var page: Control = s.pages.get("device")
+	if page == null:
+		ok(false, "Settings has its Device page")
+		return
+	var FocusCard: Script = load("res://scripts/ui/device/device_kit.gd").FocusCard
+	var panel: Control = null
+	for id in page.tabs:
+		page.select_part(id)
+		await w.frames(6)
+		var p: Control = page.panels.get(id)
+		if p == null:
+			continue
+		for c in p.find_children("*", "PanelContainer", true, false):
+			if is_instance_of(c, FocusCard) and c.action_text == "":
+				eq(c.focus_mode, Control.FOCUS_NONE, "%s: the read-only card %s takes no focus" % [id, c.name])
+		for f in p.focus_chain():
+			ok(f.focus_mode == Control.FOCUS_ALL, "%s: every stop of its focus chain takes focus (%s)" % [id, f.name])
+		if panel == null and p.has_method("can_stick_scroll") and p.can_stick_scroll():
+			panel = p
+			break
+	if panel == null:
+		ok(false, "a device page has more cards than the screen shows")
+		return
+	page.tabs[page.part].grab_focus()
+	await w.frames(2)
+	var sc: ScrollContainer = panel._stick_scroller
+	sc.scroll_vertical = 0
+	ok(["RS", load("res://scripts/ui/texts_device.gd").HINT_SCROLL] in panel.scroll_hints(), "the hint bar can name the right stick")
+	eq(panel.is_processing(), false, "nothing ticks while the stick rests")
+	var push := InputEventJoypadMotion.new()
+	push.device = 0
+	push.axis = JOY_AXIS_RIGHT_Y
+	push.axis_value = 1.0
+	_send(push)
+	await w.frames(12)
+	var down_px := sc.scroll_vertical
+	ok(down_px > 0, "the right stick pushed down scrolls the cards (%d px)" % down_px)
+	eq(focus(), page.tabs[page.part], "and focus stays where it was")
+	var rest := InputEventJoypadMotion.new()
+	rest.device = 0
+	rest.axis = JOY_AXIS_RIGHT_Y
+	rest.axis_value = 0.0
+	_send(rest)
+	await w.frames(3)
+	eq(panel.is_processing(), false, "let go: nothing ticks")
+	var at := sc.scroll_vertical
+	await w.frames(6)
+	eq(sc.scroll_vertical, at, "and the page stays put")
+	push.axis_value = -1.0
+	_send(push)
+	await w.frames(12)
+	ok(sc.scroll_vertical < at, "pushed up, it scrolls back")
+	_send(rest)
+	await w.frames(2)
+	# the quick menu over the page: the stick isn't the page's
+	sc.scroll_vertical = 0
+	await qam()
+	await w.frames(4)
+	if qm().visible:
+		push.axis_value = 1.0
+		_send(push)
+		await w.frames(8)
+		eq(sc.scroll_vertical, 0, "with the quick menu open the page under it doesn't scroll")
+		_send(rest)
+		await qam()
+		await w.frames(4)
+
+
+## CUX-5: "up" and "down" asked at the press (Kit.lead_up / lead_down) go where
+## the screen says now, both on one control.
+func test_up_and_down_asked_at_the_press() -> void:
+	var Kit: Script = load("res://scripts/ui/ui_kit.gd")
+	var host := Control.new()
+	host.name = "LeadTest"
+	w.tree.root.add_child(host)
+	var made: Array = []
+	for n in ["A", "B", "C"]:
+		var btn := Button.new()
+		btn.name = n
+		btn.focus_mode = Control.FOCUS_ALL
+		btn.position = Vector2(40, 40)   # one on top of the other: where they sit says nothing
+		btn.size = Vector2(120, 48)
+		host.add_child(btn)
+		made.append(btn)
+	var to := [made[1]]
+	Kit.lead_up([made[0]], func(): return to[0])
+	Kit.lead_down([made[0]], func(): return made[2])
+	made[0].grab_focus()
+	await up()
+	eq(focus(), made[1], "up goes where the screen says now")
+	to[0] = made[2]
+	made[0].grab_focus()
+	await up()
+	eq(focus(), made[2], "and follows when that changes")
+	made[0].grab_focus()
+	await down()
+	eq(focus(), made[2], "down has its own target")
+	host.queue_free()
+	await w.frames(2)
+	await go_tab("home")
+

@@ -16,7 +16,7 @@ GameCove is used with a pad first, a finger second and a keyboard almost never. 
 
 **CUX-6. Entering puts focus somewhere useful.** A new screen, sheet or dialog focuses its first actionable control, top left, unless it is one decision with a single primary action (then that). While a sheet, dialog or the keyboard is open, focus can't leave it. There is always something focused when there is something to press.
 
-**CUX-7. Only things that do something take focus.** Labels, headings, read-only cards, credits and disabled controls take no focus, by pad or by touch. A control that is unavailable for a reason either explains itself where it is (and isn't focusable) or stays focusable and says why on A.
+**CUX-7. Only things that do something take focus.** Labels, headings, read-only cards, credits and disabled controls take no focus, by pad or by touch. A control that is unavailable for a reason either explains itself where it is (and isn't focusable) or stays focusable and says why on A. Where a page has more read-only cards than fit (the device pages: drives, updates, fixes), the right stick scrolls them and the hint bar says so while there is more to see; the D-pad never stops on them.
 
 **CUX-8. Focus is always fully on screen.** The focused control and its ring are wholly inside the window, not under a bar, sheet or fade, and not faded out. Every scroller with controls in it follows focus, keeping a margin (FocusScroll's 18 px, more above a "More below" fade). Focus never moves to something hidden or off screen.
 
@@ -36,7 +36,7 @@ GameCove is used with a pad first, a finger second and a keyboard almost never. 
 
 ## The focus walk
 
-`app/tests/layout/focus_walk.gd` checks CUX-1, 2, 3, 5, 6, 7, 8, 9 and 13 on every screen the screenshot sets show (every screen, sheet, dialog, quick menu tab, settings page, setup and installer step), on every CI layout, in the `layout` CI job (`tools/layout/run.py --ci`, which runs it after each shot unless `FOCUS_WALK=0`). From every control the pad can focus it presses each D-pad direction with real joypad events, so the app's own handlers run, notes where focus went and what changed, puts everything back, and reports by kind:
+`app/tests/layout/focus_walk.gd` checks CUX-1, 2, 3, 5, 6, 7, 8, 9 and 13 on every screen the screenshot sets show (every screen, sheet, dialog, quick menu tab, settings page, setup and installer step), on every CI layout, in the `layout` CI job (`tools/layout/run.py --ci`, which runs it after each shot unless `FOCUS_WALK=0`). From every control the pad can focus it presses each D-pad direction with real joypad events, so the app's own handlers run, notes where focus went and what changed, puts everything back, and reports by kind (left / right aren't pressed on a slider or stepper: that is its value, checked with real presses in `suite_controller_ux.gd`, and a value can rebuild the rows it rules a frame later, which a walk without frames can't wait for):
 
 | kind | rule | what it means |
 |---|---|---|
