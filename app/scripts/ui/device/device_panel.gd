@@ -17,6 +17,7 @@ extends HBoxContainer
 
 const Kit := preload("res://scripts/ui/ui_kit.gd")
 const FadeMask := preload("res://scripts/ui/fade_mask.gd")
+const StickScroll := preload("res://scripts/ui/stick_scroll.gd")
 const DKit := preload("res://scripts/ui/device/device_kit.gd")
 const Texts := preload("res://scripts/ui/texts_device.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
@@ -133,47 +134,16 @@ func hints_for(_c: Control) -> Array:
 ## The prompts when the focused control has no A of its own: the right stick
 ## scrolls (only said while there is more than the page shows), B goes back.
 func scroll_hints() -> Array:
-	return ([["RS", Texts.HINT_SCROLL]] if can_stick_scroll() else []) + [["B", Texts.HINT_BACK]]
+	return ([StickScroll.hint()] if can_stick_scroll() else []) + [["B", Texts.HINT_BACK]]
 
 
-# ---- the right stick scrolls the cards ----------------------------------------------
-# Read-only cards take no focus (CUX-7), so the D-pad doesn't stop on them: the right
-# stick moves the page instead, the way it does on every console. Runs only while the
-# stick is held on a page that is on screen; nothing ticks otherwise.
-
-## Past this the stick counts as pushed.
-const STICK_DEADZONE := 0.3
-## Layout px a second at a full push.
-const STICK_SPEED := 1500.0
-
-var _stick := 0.0
-var _stick_carry := 0.0
-var _stick_scroller: ScrollContainer
-
-
-func _ready() -> void:
-	set_process(false)
+## Read-only cards take no focus (CUX-7), so the D-pad doesn't stop on them: the right
+## stick moves the page's cards instead (stick_scroll.gd).
+var stick_scroll: Node
 
 
 func can_stick_scroll() -> bool:
-	if _stick_scroller == null or not is_instance_valid(_stick_scroller):
-		return false
-	var bar := _stick_scroller.get_v_scroll_bar()
-	return bar != null and bar.max_value - bar.page > 1.0
-
-
-func _unhandled_input(event: InputEvent) -> void:
-	if not (event is InputEventJoypadMotion) or (event as InputEventJoypadMotion).axis != JOY_AXIS_RIGHT_Y:
-		return
-	var v: float = (event as InputEventJoypadMotion).axis_value
-	stick(v if _owns_pad() else 0.0)
-
-
-## The right stick's up / down position (-1..1): scrolls while past the dead zone.
-func stick(v: float) -> void:
-	_stick = v if absf(v) > STICK_DEADZONE else 0.0
-	_stick_carry = 0.0
-	set_process(_stick != 0.0 and can_stick_scroll() and is_visible_in_tree())
+	return stick_scroll != null and is_instance_valid(stick_scroll) and stick_scroll.can_scroll()
 
 
 ## The page is the one the pad is on: focus is inside it or beside it in its
@@ -187,19 +157,6 @@ func _owns_pad() -> bool:
 		return false
 	var host := get_parent()
 	return is_ancestor_of(f) or (host != null and host.is_ancestor_of(f))
-
-
-func _process(delta: float) -> void:
-	if _stick == 0.0 or not can_stick_scroll() or not _owns_pad():
-		_stick = 0.0
-		set_process(false)
-		return
-	# faster the further it is pushed; whole pixels, the rest carried to the next frame
-	_stick_carry += signf(_stick) * (absf(_stick) - STICK_DEADZONE) / (1.0 - STICK_DEADZONE) * STICK_SPEED * delta
-	var px := int(_stick_carry)
-	if px != 0:
-		_stick_carry -= px
-		_stick_scroller.scroll_vertical += px
 
 
 func _on_focus(c: Control) -> void:
@@ -220,7 +177,7 @@ func side_column(ratio := 0.82) -> VBoxContainer:
 ## The scrolling column of cards on the right. Returns the VBox to fill.
 func main_column(ratio := 1.18) -> VBoxContainer:
 	var s := DKit.scroller()
-	_stick_scroller = s
+	stick_scroll = StickScroll.attach(s, _owns_pad)
 	# The column sits in a holder with a fade at its foot while more cards
 	# wait below, so the last card never looks sliced off.
 	var holder := Control.new()

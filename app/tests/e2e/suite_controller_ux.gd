@@ -266,10 +266,10 @@ func test_read_only_device_cards_take_no_focus_and_the_right_stick_scrolls() -> 
 		return
 	page.tabs[page.part].grab_focus()
 	await w.frames(2)
-	var sc: ScrollContainer = panel._stick_scroller
+	var sc: ScrollContainer = panel.stick_scroll.scroll
 	sc.scroll_vertical = 0
 	ok(["RS", load("res://scripts/ui/texts_device.gd").HINT_SCROLL] in panel.scroll_hints(), "the hint bar can name the right stick")
-	eq(panel.is_processing(), false, "nothing ticks while the stick rests")
+	eq(panel.stick_scroll.is_processing(), false, "nothing ticks while the stick rests")
 	var push := InputEventJoypadMotion.new()
 	push.device = 0
 	push.axis = JOY_AXIS_RIGHT_Y
@@ -285,7 +285,7 @@ func test_read_only_device_cards_take_no_focus_and_the_right_stick_scrolls() -> 
 	rest.axis_value = 0.0
 	_send(rest)
 	await w.frames(3)
-	eq(panel.is_processing(), false, "let go: nothing ticks")
+	eq(panel.stick_scroll.is_processing(), false, "let go: nothing ticks")
 	var at := sc.scroll_vertical
 	await w.frames(6)
 	eq(sc.scroll_vertical, at, "and the page stays put")
@@ -307,6 +307,41 @@ func test_read_only_device_cards_take_no_focus_and_the_right_stick_scrolls() -> 
 		_send(rest)
 		await qam()
 		await w.frames(4)
+
+
+## CUX-9: a page's text below the fold is read with the right stick too (the Emulation page with
+## nothing set up has one button and a card of steps under it), and the hint bar says so.
+func test_the_right_stick_scrolls_a_page_and_the_hint_bar_names_it() -> void:
+	ok(await go_tab("library"), "Library with the pad")
+	await w.frames(3)
+	main().open_emulation()
+	await w.wait_s(0.6)
+	var page: Control = main().page
+	if page == null or page.get("stick_scroll") == null:
+		ok(false, "the Emulation page is open (%s)" % where())
+		return
+	ok(focus() != null and page.is_ancestor_of(focus()), "focus is on the page (%s)" % where())
+	if not page.stick_scroll.can_scroll():
+		print("E2E NOTE page scroll: the whole page fits this screen")
+	else:
+		main()._update_hints()
+		ok(main()._last_hints.any(func(h): return h[0] is String and h[0] == "RS"), "the hint bar names the right stick (%s)" % [main()._last_hints])
+		var push := InputEventJoypadMotion.new()
+		push.device = 0
+		push.axis = JOY_AXIS_RIGHT_Y
+		push.axis_value = 1.0
+		var before: int = page.scroll.scroll_vertical
+		var f0 := focus()
+		_send(push)
+		await w.frames(12)
+		ok(page.scroll.scroll_vertical > before, "pushed down, the page scrolls (%d px)" % (page.scroll.scroll_vertical - before))
+		eq(focus(), f0, "and focus stays where it was")
+		push.axis_value = 0.0
+		_send(push)
+		await w.frames(3)
+		eq(page.stick_scroll.is_processing(), false, "let go: nothing ticks")
+	await b()
+	await w.frames(4)
 
 
 ## CUX-5: "up" and "down" asked at the press (Kit.lead_up / lead_down) go where

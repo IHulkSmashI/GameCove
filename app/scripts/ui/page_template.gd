@@ -10,6 +10,7 @@ extends Control
 ##   var body := p.add_card("About this game", "info")   # -> VBoxContainer
 ##   p.finish()                                  # wires focus: actions -> cards
 
+const StickScroll := preload("res://scripts/ui/stick_scroll.gd")
 const Kit := preload("res://scripts/ui/ui_kit.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const ArtCache := preload("res://scripts/ui/art_cache.gd")
@@ -47,6 +48,8 @@ var cards_box: VBoxContainer
 var cards_gap: Control
 const CARDS_GAP := 30.0
 var scroll: ScrollContainer
+## The right stick scrolls the page (stick_scroll.gd); main.gd names it in the hint bar.
+var stick_scroll: Node
 ## Focusable controls inside cards, top to bottom (add_focusable / finish).
 var focusables: Array = []
 var _fade: TextureRect
@@ -144,6 +147,10 @@ func setup_page(g: Dictionary, line := "") -> void:
 	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
 	scroll.offset_top = FRAME_TOP + top_inset
 	scroll.offset_bottom = -52
+	# what the D-pad doesn't stop on (a card of text, the notes under one) is read with the right stick
+	stick_scroll = StickScroll.attach(scroll, func() -> bool:
+		var f := get_viewport().gui_get_focus_owner() if get_viewport() != null else null
+		return is_visible_in_tree() and f != null and is_ancestor_of(f))
 	# Follows focus once the layout settles, keeping rows clear of the
 	# "More below" fade at the bottom.
 	load("res://scripts/ui/focus_scroll.gd").attach(scroll, 64.0)

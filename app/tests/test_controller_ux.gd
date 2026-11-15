@@ -34,7 +34,7 @@ func test_a_device_page_leaves_read_only_cards_out_and_names_the_right_stick() -
 	col.add_child(card)
 	panel.chain([act, card])
 	eq(panel.focus_chain(), [act], "the read-only card is left out of the focus chain")
-	var sc: ScrollContainer = panel._stick_scroller
+	var sc: ScrollContainer = panel.stick_scroll.scroll
 	ok(sc != null and sc.is_ancestor_of(col), "the cards' scroller is the one the right stick moves")
 	var bar := sc.get_v_scroll_bar()
 	bar.max_value = 400.0
@@ -46,8 +46,8 @@ func test_a_device_page_leaves_read_only_cards_out_and_names_the_right_stick() -
 	bar.page = 400.0
 	eq(panel.scroll_hints(), [["RS", TD.HINT_SCROLL], ["B", TD.HINT_BACK]], "more below: the right stick is named")
 	# not on screen: a push starts nothing (suite_controller_ux.gd scrolls a real page with it)
-	panel.stick(1.0)
-	eq(panel.is_processing(), false, "a page that isn't shown never ticks")
+	panel.stick_scroll.push(1.0)
+	eq(panel.stick_scroll.is_processing(), false, "a page that isn't shown never ticks")
 	panel.free()
 
 

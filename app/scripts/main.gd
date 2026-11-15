@@ -10,6 +10,7 @@ extends Control
 const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const TouchTargets := preload("res://scripts/ui/touch_targets.gd")
+const StickScroll := preload("res://scripts/ui/stick_scroll.gd")
 const Home := preload("res://scripts/ui/home.gd")
 const LibraryScreen := preload("res://scripts/ui/library_screen.gd")
 const DiscoverScreen := preload("res://scripts/ui/discover_screen.gd")
@@ -2456,6 +2457,15 @@ func _update_hints(f: Control = null) -> void:
 				has_guide = true
 		if not has_guide:
 			list.append(["GUIDE", "Quick menu"])
+	# a page with more than it shows: the right stick scrolls it (said before Back, after the action)
+	if page != null and page.get("stick_scroll") != null and is_instance_valid(page.stick_scroll) and page.stick_scroll.can_scroll():
+		var at := 0
+		for i in list.size():
+			if list[i][0] is String and list[i][0] == "B":
+				at = i
+				break
+			at = i + 1
+		list.insert(at, StickScroll.hint())
 	for c in hint_bar.get_children():
 		hint_bar.remove_child(c)
 		c.queue_free()
