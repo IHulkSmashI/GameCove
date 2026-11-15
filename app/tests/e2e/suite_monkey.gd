@@ -77,6 +77,15 @@ func test_seed_121003_home_keeps_something_focused() -> void:
 	await without_stores()
 
 
+## 163003: the Library's search opened from a game page, a space typed, B held: the grid was rebuilt for the
+## text put back after focus had gone to a cover of the old list, and nothing was focused.
+func test_seed_163003_a_cancelled_search_leaves_a_cover_focused() -> void:
+	await with_stores()
+	stores.set_speed(0.05)
+	await journey(163003)
+	await without_stores()
+
+
 ## One journey of STEPS moves from `seed`; true when an invariant broke (reported through ok()).
 func journey(seed: int) -> bool:
 	print("E2E SEED suite_monkey::journey %d" % seed)

@@ -1055,11 +1055,18 @@ static func _initial(g: Dictionary) -> String:
 
 
 func _after_search() -> void:
+	# The keyboard's last change (B puts the text back) is still waiting to rebuild the grid: done
+	# now, so focus goes to a cover of the list as it is. It went to one of the list before, which
+	# the rebuild then threw away, and nothing was focused (monkey seed 163003).
+	if _query_pending:
+		_apply_query()
+	var to: Control = null
 	if not shown.is_empty():
 		_ensure_window(0, 0)
-		_focus_later(_tile_at(0))
-	else:
-		_focus_later(search_button)
+		to = _tile_at(0)
+	if to == null:
+		to = default_focus()
+	_focus_later(to if to != null else search_button)
 
 
 func _refocus_if_lost(ref: WeakRef) -> void:
