@@ -7,6 +7,9 @@ extends "res://scripts/ui/discover/section.gd"
 
 const ChoiceRow := preload("res://scripts/ui/choice_row.gd")
 
+## Width of the Store and Sort rows.
+const TOOLBAR_W := 640.0
+
 var store_row: VBoxContainer
 var sort_row: VBoxContainer
 var rows: Array = []            # deal row Buttons, in order
@@ -45,6 +48,9 @@ func build() -> void:
 	# of them side by side would leave the second out of the D-pad's reach (CUX-3, CUX-9).
 	var bar := Kit.vbox(8)
 	bar.name = "Toolbar"
+	# two short choices: a readable width at the left, not the whole of a wide screen
+	bar.custom_minimum_size.x = TOOLBAR_W
+	bar.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	var stores := Model.stores_of(_deals)
 	var store := current_store()
 	if not stores.any(func(s): return s[0] == store):
