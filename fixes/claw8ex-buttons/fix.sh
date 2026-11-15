@@ -87,6 +87,7 @@ install() {
 		die "could not write the InputPlumber override"
 	fi
 	m_add ipflag buttons
+	! ip_clawdeck_backed_up || m_add clawdeck "$IP_OVERRIDE"
 	m_add rev "$REVISION"
 	say "installed: left face button = Steam menu, right face button = Quick Access"
 }

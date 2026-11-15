@@ -18,7 +18,7 @@
 %global uhb_commit bbaad63
 
 Name:           gamecove
-Version:        0.1.0
+Version:        0.1.1
 Release:        1%{?dist}
 Summary:        Controller-first home screen for Linux handhelds
 # GameCove: GPL-3.0-or-later. The gyro fix's HID-BPF program (fixes/claw8ex-gyro/bpf,
@@ -196,5 +196,8 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/gamecove
 %dir %{_localstatedir}/lib/gamecove
 
 %changelog
+* Thu Nov 12 2026 Mena Hanna <227083792+IHulkSmashI@users.noreply.github.com> - 0.1.1-1
+- Installer fixes from the first handheld test: one admin password, pad navigation, ClawDeck coexistence, Install Heroic
+
 * Sun Nov 08 2026 Mena Hanna <227083792+IHulkSmashI@users.noreply.github.com> - 0.1.0-1
 - First package: session, gamescope helper, root-fix dispatcher, polkit policy

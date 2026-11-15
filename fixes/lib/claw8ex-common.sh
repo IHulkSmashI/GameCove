@@ -222,6 +222,7 @@ m_undo() {
 		grubline) grub_line_remove "$arg" || { done_ok=0; boot_kept=1; } ;;
 		ipflag) ip_flag_off "$arg" || done_ok=0 ;;
 		rev) ;; # the installed revision (m_rev): nothing to undo
+		clawdeck) ;; # ClawDeck's file was adopted; the flag's undo (ip_regen) puts it back
 		*) warn "unknown manifest line: $kind $arg" ;;
 		esac
 		[ "$done_ok" = 1 ] || printf '%s %s\n' "$kind" "$arg" >>"$M_DIR/left"
@@ -433,9 +434,47 @@ IP_FLAGS="$ROOT$GC_STATE/inputplumber"
 
 ip_override_ours() { [ -f "$ROOT$IP_OVERRIDE" ] && head -n 1 "$ROOT$IP_OVERRIDE" | grep -qxF "$IP_MARK"; }
 
-# An override someone else wrote is never touched.
+# ClawDeck (same Claw, many users come from it) leaves its own override of this file: its header says
+# "ClawDeck override of the stock file (only capability_map_id differs)", the map it points at is
+# /etc/inputplumber/capability_maps/msiclaw_claw8ex.yaml. It is recognised, never refused: the first
+# GameCove feature that needs the override backs it up (ip_adopt_clawdeck) and builds GameCove's own on
+# top, keeping ClawDeck's capability map; the last one to go puts ClawDeck's file back (ip_clawdeck_restore).
+CD_BACKUP=$GC_STATE/backup/clawdeck
+ip_override_clawdeck() { [ -f "$ROOT$IP_OVERRIDE" ] && head -n 3 "$ROOT$IP_OVERRIDE" | grep -qi 'ClawDeck override'; }
+ip_clawdeck_backup() { printf '%s%s/devices.d/%s' "$ROOT" "$CD_BACKUP" "${IP_OVERRIDE##*/}"; }
+ip_clawdeck_backed_up() { [ -f "$(ip_clawdeck_backup)" ]; }
+
+# Back ClawDeck's override up (once), before GameCove's replaces it. Nothing to do for any other file.
+ip_adopt_clawdeck() {
+	ip_override_clawdeck || return 0
+	_cb=$(ip_clawdeck_backup)
+	[ ! -f "$_cb" ] || return 0
+	mkdir -p "${_cb%/*}" && cp -p "$ROOT$IP_OVERRIDE" "$_cb" || { warn "could not back up ClawDeck's $IP_OVERRIDE"; return 1; }
+	say "ClawDeck's override of the controller config is backed up in $CD_BACKUP; Undo puts it back"
+}
+
+# The last GameCove feature is out: ClawDeck's override goes back where it was (when what's there now is
+# GameCove's or nothing); the backup is removed. Sets _cd_restored=1 when the file was put back.
+ip_clawdeck_restore() {
+	_cd_restored=0
+	_cb=$(ip_clawdeck_backup)
+	[ -f "$_cb" ] || return 0
+	if [ ! -e "$ROOT$IP_OVERRIDE" ] || ip_override_ours; then
+		mkdir -p "$ROOT${IP_OVERRIDE%/*}" && cp -p "$_cb" "$ROOT$IP_OVERRIDE.gamecove-tmp" && mv -f "$ROOT$IP_OVERRIDE.gamecove-tmp" "$ROOT$IP_OVERRIDE" || {
+			rm -f "$ROOT$IP_OVERRIDE.gamecove-tmp"
+			warn "could not put ClawDeck's $IP_OVERRIDE back; the copy is in $CD_BACKUP"
+			return 1
+		}
+		_cd_restored=1
+	fi
+	rm -f "$_cb"
+	rmdir "$ROOT$CD_BACKUP/devices.d" "$ROOT$CD_BACKUP" "$ROOT$GC_STATE/backup" 2>/dev/null || true
+	return 0
+}
+
+# An override someone else wrote is never touched (ClawDeck's is adopted, see above).
 ip_require_free() {
-	[ ! -e "$ROOT$IP_OVERRIDE" ] || ip_override_ours || die "$IP_OVERRIDE exists and isn't GameCove's; leaving it"
+	[ ! -e "$ROOT$IP_OVERRIDE" ] || ip_override_ours || ip_override_clawdeck || die "$IP_OVERRIDE exists and isn't GameCove's or ClawDeck's; leaving it"
 	[ -f "$ROOT$IP_STOCK" ] || die "$IP_STOCK not found: this InputPlumber has no config for the Claw 8 EX"
 }
 
@@ -489,7 +528,7 @@ ip_refresh() {
 }
 
 ip_flag_on() {
-	mkdir -p "$IP_FLAGS" && : >"$IP_FLAGS/$1" && ip_regen
+	mkdir -p "$IP_FLAGS" && : >"$IP_FLAGS/$1" && ip_adopt_clawdeck && ip_regen
 }
 
 ip_flag_off() {
@@ -539,6 +578,15 @@ ip_render() {
 	# runs after such an update rebuilds the override this way, and our two files never shadow the
 	# system's fix while the real remove waits for the admin password.
 	ip_flag buttons && ! ip_stock_handles_buttons && swap=1
+	map_id=$IP_MAP_ID
+	if [ "$swap" = 0 ] && ip_clawdeck_backed_up; then
+		# adopted from ClawDeck without the face-button feature: ClawDeck's capability map stays in use
+		_cdm=$(sed -n 's/^capability_map_id:[[:space:]]*\([^[:space:]]*\).*/\1/p' "$(ip_clawdeck_backup)" | head -n 1)
+		if [ -n "$_cdm" ] && [ "$_cdm" != "$(ip_stock_map_id)" ]; then
+			swap=1
+			map_id=$_cdm
+		fi
+	fi
 	ip_flag imu && ! grep -q 'name: gyro_3d' "$ROOT$IP_STOCK" && imu=1
 	snip="$IP_FLAGS/.snippet"
 	: >"$snip"
@@ -548,7 +596,7 @@ ip_render() {
 	fi
 	printf '%s\n# Delete this file and restart inputplumber to go back to the stock config.\n' "$IP_MARK"
 	printf '# stock-sha256: %s\n' "$(ip_stock_sha)"
-	awk -v swap="$swap" -v imu="$imu" -v snip="$snip" -v mapid="$IP_MAP_ID" '
+	awk -v swap="$swap" -v imu="$imu" -v snip="$snip" -v mapid="$map_id" '
 		swap == 1 && !swapped && /^capability_map_id:[ \t]*[^ \t]/ { print "capability_map_id: " mapid; swapped = 1; next }
 		imu == 1 && !inserted && (/^# Optional configuration/ || /^options:/) {
 			while ((getline line < snip) > 0) print line
@@ -563,9 +611,16 @@ ip_render() {
 ip_regen() {
 	if ! ip_flag buttons && ! ip_flag imu; then
 		rm -f "$IP_FLAGS/accel" "$IP_FLAGS/.snippet"
+		_gone=0
 		if ip_override_ours; then
 			rm -f "$ROOT$IP_OVERRIDE"
+			_gone=1
+		fi
+		ip_clawdeck_restore || return 1
+		if [ "$_gone" = 1 ]; then
 			ip_tidy_dirs
+		fi
+		if [ "$_gone" = 1 ] || [ "$_cd_restored" = 1 ]; then
 			ip_restart
 		fi
 		rmdir "$IP_FLAGS" 2>/dev/null || true

@@ -13,7 +13,8 @@
 #   4. unpacks the app into ~/.local/share/gamecove/installer
 #   5. adds "GameCove Installer" to the app menu and "Install GameCove" to the desktop
 #   6. opens GameCove in installer mode, which explains each step and asks
-#      before changing anything
+#      before changing anything. It runs apart from the terminal (systemd-run --user, else
+#      setsid, else nohup), so closing the terminal window doesn't stop it
 # It needs no root and changes nothing outside your home folder. The installer
 # app asks for your admin password (pkexec) only for the steps that need it.
 #
@@ -29,7 +30,7 @@
 # is one) the newest of those is used.
 # Environment (for tests and forks): GAMECOVE_REPO, GAMECOVE_API, GAMECOVE_TAG, GAMECOVE_NOTIFY,
 #   GAMECOVE_HOME, GAMECOVE_ROOT (prefix for /etc/os-release, /run/ostree-booted),
-#   CURL, SHA256SUM, COSIGN (a cosign binary; else the system's, else a pinned download),
+#   CURL, SHA256SUM, SYSTEMD_RUN, SETSID, COSIGN (a cosign binary; else the system's, else a pinned download),
 #   GAMECOVE_ALLOW_UNSIGNED=1 (accept a release without a signature, e.g. one from before
 #   signing; the checksums are still checked).
 #
@@ -48,6 +49,8 @@ TAG="${GAMECOVE_TAG:-}"
 HOME_DIR="${GAMECOVE_HOME:-$HOME}"
 ROOT="${GAMECOVE_ROOT:-}"
 CURL="${CURL:-curl}"
+SYSTEMD_RUN="${SYSTEMD_RUN:-systemd-run}"
+SETSID="${SETSID:-setsid}"
 SHA256SUM="${SHA256SUM:-sha256sum}"
 DATA="$HOME_DIR/.local/share/gamecove"
 DEST="$DATA/installer"
@@ -214,7 +217,39 @@ launch_app() {
 	fi
 	say "Opening the GameCove installer"
 	log "launch $bin -- --installer"
-	nohup "$bin" -- --installer >/dev/null 2>&1 &
+	start_detached "$bin" -- --installer
+	say "The installer is open. You can close this window; the installer keeps going."
+}
+
+# start_detached <command...>: run it apart from this terminal, so closing Konsole (or the
+# terminal dying, or the SSH session ending) doesn't take the installer down with it. A
+# transient user service first (systemd-run --user: the user manager owns it, nothing of the
+# terminal's session or process group is left; the display variables are handed over, since the
+# user manager may not have them), else a new session (setsid -f), else nohup in the background.
+# Output goes to the log file, never to the terminal.
+start_detached() {
+	if command -v "$SYSTEMD_RUN" >/dev/null 2>&1; then
+		unit="gamecove-installer-$$"
+		envs=""
+		for v in DISPLAY WAYLAND_DISPLAY XAUTHORITY XDG_RUNTIME_DIR XDG_SESSION_TYPE XDG_CURRENT_DESKTOP DBUS_SESSION_BUS_ADDRESS; do
+			eval "isset=\${$v+x}"
+			[ -z "$isset" ] || envs="$envs --setenv=$v"
+		done
+		# shellcheck disable=SC2086  # $envs is a list of --setenv=NAME words
+		if "$SYSTEMD_RUN" --user --collect --quiet --unit="$unit" $envs "$@" >/dev/null 2>&1; then
+			log "launched as user service $unit"
+			return 0
+		fi
+		log "systemd-run --user didn't start it; trying setsid"
+	fi
+	if command -v "$SETSID" >/dev/null 2>&1; then
+		"$SETSID" -f "$@" >>"$LOG" 2>&1 </dev/null && {
+			log "launched in its own session"
+			return 0
+		}
+	fi
+	log "launched with nohup"
+	nohup "$@" >>"$LOG" 2>&1 </dev/null &
 }
 
 # version_lt <a> <b>: tag a (vX.Y.Z[-pre]) is older than b; numeric parts first, then a pre-release is older than

@@ -242,6 +242,7 @@ install() {
 	done
 	ip_flag_on imu || fail "could not add the gyro to the InputPlumber override"
 	m_add ipflag imu
+	! ip_clawdeck_backed_up || m_add clawdeck "$IP_OVERRIDE"
 	m_add rev "$REVISION"
 	karg_hold "$FW_KARG" "$NAME" || fail "could not set the kernel argument $FW_KARG"
 	m_add karg "$FW_KARG"

@@ -66,7 +66,9 @@ func test_welcome_shows_device_and_modes() -> void:
 	ok(easy.selected, "Easy is the default")
 	eq(s.focusables()[0], easy)
 	easy.pressed.emit()
-	eq(s.plan.step, "stores", "Easy offers store sign-in first (the welcome card promises it)")
+	eq(s.plan.step, "welcome", "A on a card only selects it: the page stays")
+	s.next_step()
+	eq(s.plan.step, "stores", "Continue: Easy offers store sign-in first (the welcome card promises it)")
 	eq(s.skip_button.text, "Skip for now", "one press to skip")
 	s.skip_step()
 	eq(s.plan.step, "art", "Easy asks for game art (no key ships with GameCove)")
@@ -130,6 +132,7 @@ func test_welcome_shows_the_cached_device_photo() -> void:
 func test_custom_walk_and_choices() -> void:
 	var s := _screen(F.target("bazzite"))
 	s.pick_mode("custom")
+	s.next_step()   # Easy / Custom is a radio choice: Continue goes on
 	eq(s.plan.step, "startup")
 	var steam_card: Button = s.body.find_child("Card_startup_steam", true, false)
 	steam_card.pressed.emit()
@@ -182,6 +185,7 @@ func test_install_runs_to_done() -> void:
 	var setup := F.FakeSetup.new()
 	var s := _screen(F.target("bazzite"), setup)
 	s.pick_mode("easy")
+	s.next_step()   # Easy / Custom is a radio choice: Continue goes on
 	s.skip_step()
 	s.skip_step()
 	s.next_step()
@@ -286,6 +290,7 @@ func test_uninstall_asks_about_save_backups_separately() -> void:
 func test_art_step_on_the_desktop() -> void:
 	var s := _screen(F.target("bazzite"))
 	s.pick_mode("easy")
+	s.next_step()   # Easy / Custom is a radio choice: Continue goes on
 	s.next_step()
 	eq(s.plan.step, "art")
 	var a: Control = s.art_step
@@ -406,6 +411,7 @@ func test_easy_offers_store_sign_in() -> void:
 	var s := _screen(F.target("bazzite"), setup)
 	eq(s.plan.steps(), ["welcome", "stores", "art", "summary", "progress", "done"], "Easy: stores after welcome, before Game art")
 	s.pick_mode("easy")
+	s.next_step()   # Easy / Custom is a radio choice: Continue goes on
 	eq(s.plan.step, "stores", "the store step")
 	for store in ["epic", "gog", "amazon"]:
 		ok(s.body.find_child("Card_store_" + store, true, false) != null, store + " has a card")
@@ -431,13 +437,12 @@ func test_easy_offers_store_sign_in() -> void:
 	# one press on Skip for now, from a fresh start
 	var s2 := _screen(F.target("bazzite"))
 	s2.pick_mode("easy")
+	s2.next_step()   # Easy / Custom is a radio choice: Continue goes on
 	s2.skip_step()
 	eq(s2.plan.step, "art", "Skip for now: straight to Game art")
 	s2.skip_step()
 	eq(s2.plan.summary()[2]["value"], "skipped", "the summary knows stores were skipped")
 	_free(s2)
-	var screen_src := FileAccess.get_file_as_string("res://scripts/ui/installer/installer_screen.gd")
-	ok(screen_src.contains("plan.step == \"stores\" and plan.mode == \"easy\""), "Easy's store step starts with the focus on Continue")
 	ok(TI.MODE_EASY_LINE.contains("sign in to Epic, GOG and Amazon"), "the Easy card says so")
 
 

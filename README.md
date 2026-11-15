@@ -632,7 +632,14 @@ that's how a model moves up. Details per device: [docs/DEVICES.md](docs/DEVICES.
    away, sign in to your stores, get free game art, pick your fixes and extras (like Moonlight for streaming), and
    you're done.
 
-It asks for your admin password once, for the system package and device fixes.
+It asks for your admin password once, for the system package and device fixes: the installer tells you before it
+starts, and everything that needs it runs in one prompt. On KDE (Wayland) it switches Plasma's on-screen keyboard on
+for that prompt and puts your setting back afterwards, since Steam's keyboard can't type into it.
+
+- **ClawDeck already set up?** GameCove recognises ClawDeck's files on the MSI Claw 8 EX, keeps a backup of them and
+  adopts them (or tells you it is "already set up by ClawDeck"). A fix that fails doesn't stop the install: it is
+  listed at the end with its own Try again.
+- **No Heroic yet?** The stores step has an Install Heroic button (from Flathub, for you only, no password).
 
 - **Bazzite and Fedora Atomic:** installs as a system package. Your previous system stays in the boot menu.
 - **SteamOS:** installs as a system extension that survives SteamOS updates. Read-only mode stays on. After a SteamOS

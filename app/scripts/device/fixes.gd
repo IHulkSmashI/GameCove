@@ -67,7 +67,7 @@ const GRUB_DEFAULT := "/etc/default/grub"
 const VRR_GRUB_MARK := "# GameCove claw8ex-vrr"
 ## Helper state= -> page status (see status_of for the rest).
 const STATE_STATUS := {"on": "applied", "restart": "restart", "partial": "partial", "os-fixed": "os-fixed",
-	"not-needed": "not-needed", "n/a": "not-needed", "unsupported": "blocked", "other-override": "blocked"}
+	"not-needed": "not-needed", "n/a": "not-needed", "unsupported": "blocked", "other-override": "blocked", "clawdeck": "not-needed"}
 
 var catalogue: Array = []
 var device_id := "unknown"

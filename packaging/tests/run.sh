@@ -936,10 +936,80 @@ done
 touch "$T/offline"
 : >"$T/launch.log"
 expect_code 0 "bootstrap offline uses the cached app" env PATH="$GB:$PATH" GAMECOVE_HOME="$T/gghome" GAMECOVE_ROOT="$R_BAZ" \
-	GAMECOVE_ARCH=x86_64 DISPLAY=:9 sh "$GG"
-sleep 0.3
+	GAMECOVE_ARCH=x86_64 DISPLAY=:9 SYSTEMD_RUN=none sh "$GG"
+sleep 0.5
 contains "$T/launch.log" "^app -- --installer$" "installer launched with user args"
 lacks "$T/launch.log" "prefetch-photo" "the installer fetches the photo itself when it opens"
+contains "$T/out" "You can close this window" "the bootstrap says the terminal can be closed"
+rm -f "$T/offline"
+
+# The installer outlives the terminal (device finding 1: closing Konsole killed it mid-way).
+# 1. systemd-run --user --collect when it's there, with the display handed over
+cat >"$GB/systemd-run" <<EOF2
+#!/bin/sh
+echo "\$*" >>"$T/sysrun.log"
+while [ \$# -gt 0 ]; do
+	case "\$1" in
+	--*) shift ;;
+	*) break ;;
+	esac
+done
+nohup "\$@" >/dev/null 2>&1 &
+EOF2
+chmod +x "$GB/systemd-run"
+touch "$T/offline"
+: >"$T/launch.log"
+: >"$T/sysrun.log"
+expect_code 0 "launch through systemd-run" env PATH="$GB:$PATH" GAMECOVE_HOME="$T/gghome" GAMECOVE_ROOT="$R_BAZ" \
+	GAMECOVE_ARCH=x86_64 DISPLAY=:9 SYSTEMD_RUN="$GB/systemd-run" sh "$GG"
+sleep 0.5
+contains "$T/sysrun.log" "^--user --collect " "a transient user service, collected when it ends"
+contains "$T/sysrun.log" "--setenv=DISPLAY" "the display goes to the service (the user manager may not have it)"
+contains "$T/sysrun.log" "gamecove.x86_64 -- --installer$" "it runs the installer app"
+contains "$T/launch.log" "^app -- --installer$" "and the installer started"
+contains "$T/out" "You can close this window" "systemd-run: close the window"
+# 2. systemd-run failing (no user manager): a new session with setsid -f
+cat >"$GB/systemd-run-fail" <<'EOF2'
+#!/bin/sh
+exit 1
+EOF2
+cat >"$GB/setsid-log" <<EOF2
+#!/bin/sh
+echo "\$*" >>"$T/setsid.log"
+[ "\$1" = "-f" ] && shift
+nohup "\$@" >/dev/null 2>&1 &
+EOF2
+chmod +x "$GB/systemd-run-fail" "$GB/setsid-log"
+: >"$T/launch.log"
+: >"$T/setsid.log"
+expect_code 0 "launch falls back to setsid" env PATH="$GB:$PATH" GAMECOVE_HOME="$T/gghome" GAMECOVE_ROOT="$R_BAZ" \
+	GAMECOVE_ARCH=x86_64 DISPLAY=:9 SYSTEMD_RUN="$GB/systemd-run-fail" SETSID="$GB/setsid-log" sh "$GG"
+sleep 0.5
+contains "$T/setsid.log" "^-f .*gamecove.x86_64 -- --installer$" "setsid -f starts the installer"
+contains "$T/launch.log" "^app -- --installer$" "installer started after systemd-run failed"
+contains "$T/out" "You can close this window" "setsid: close the window"
+# 3. neither: nohup in the background, still with the message
+: >"$T/launch.log"
+expect_code 0 "launch falls back to nohup" env PATH="$GB:$PATH" GAMECOVE_HOME="$T/gghome" GAMECOVE_ROOT="$R_BAZ" \
+	GAMECOVE_ARCH=x86_64 DISPLAY=:9 SYSTEMD_RUN=none SETSID=none sh "$GG"
+sleep 0.5
+contains "$T/launch.log" "^app -- --installer$" "nohup still starts the installer"
+contains "$T/out" "You can close this window" "nohup: close the window"
+# 4. the real thing: the installer is in its own session, not the terminal's (a SIGHUP to the
+# terminal's session or process group can't reach it)
+if command -v setsid >/dev/null 2>&1; then
+	rm -rf "$T/gghome-sid" "$T/app.sid" "$T/term.sid"
+	mkdir -p "$T/gghome-sid/.local/share/gamecove/installer/app"
+	printf '#!/bin/sh\nps -o sid= -p $$ | tr -d " " >"%s/app.sid"\n' "$T" >"$T/gghome-sid/.local/share/gamecove/installer/app/gamecove.x86_64"
+	chmod +x "$T/gghome-sid/.local/share/gamecove/installer/app/gamecove.x86_64"
+	# the bootstrap in a session of its own (what a terminal is): the app must not share it
+	env PATH="$GB:$PATH" GAMECOVE_HOME="$T/gghome-sid" GAMECOVE_ROOT="$R_BAZ" GAMECOVE_ARCH=x86_64 DISPLAY=:9 SYSTEMD_RUN=none \
+		setsid sh -c 'ps -o sid= -p $$ | tr -d " " >"$1/term.sid"; sh "$2" >"$1/out-sid" 2>&1' sh "$T" "$GG"
+	sleep 1
+	if [ -s "$T/app.sid" ] && [ -s "$T/term.sid" ] && [ "$(cat "$T/app.sid")" != "$(cat "$T/term.sid")" ]; then ok; else bad "the installer must run in a session of its own, not the terminal's ($(cat "$T/app.sid" 2>/dev/null) vs $(cat "$T/term.sid" 2>/dev/null))"; fi
+	rm -rf "$T/gghome-sid"
+fi
+rm -f "$T/offline"
 rm -f "$T/offline"
 rm -rf "$T/gghome"
 expect_code 1 "bootstrap offline without a cache" env PATH="$GB:$PATH" GAMECOVE_HOME="$T/gghome" GAMECOVE_ROOT="$R_BAZ" \

@@ -536,9 +536,17 @@ Fixes page shows the admin note on the file fixes.
 ### Everything else that runs as root, and where it writes
 
 The two helper actions above are not the whole list. The installer (Desktop Mode, the administrator password) runs
-a few `pkexec sh -c` steps of its own (`app/scripts/installer/commands.gd`; the package path and its sha256 are
+a few root steps of its own (`app/scripts/installer/commands.gd`; the package path and its sha256 are
 arguments, never pasted into the script; the root step copies the package into a root-only folder and checks the
-hash again before installing the copy), and the fixes write the files they name. Between them, root writes only
+hash again before installing the copy), and the fixes write the files they name. **One password for a whole run**:
+the installer puts every root step that is next to each other (the package, then each fix, or on removal the fixes
+and the package) into one `sh` script that a single `pkexec` runs (`Commands.batch_script`). The script prints each
+step's own result (`@@GC start|end|retry|pending N`), so every step keeps its own result, its fallback and its undo
+(the undo steps of "Undo changes" are one pkexec too); a required step that fails stops the script, an optional one
+(every fix) doesn't. It uses the same polkit action as before (`pkexec` of `sh`), so no policy or rule changed. On
+KDE Plasma on Wayland the installer switches Plasma's virtual keyboard on (`kwinrc` `[Wayland]` `InputMethod`,
+`app/scripts/installer/root_keyboard.gd`) while the password dialog is open and puts the old value back afterwards:
+the dialog is a desktop window, so GameCove's own keyboard (and Steam's) can't type into it. Between them, root writes only
 these places:
 
 | Path | Written by | Why |

@@ -20,6 +20,15 @@ S
 	chmod +x "$R/.bin/systemctl"
 }
 
+# ClawDeck's own drop-in (finding 10) already silences it: the system's, so nothing of ours is written
+t_new
+bazzite
+mkdir -p "$R/etc/systemd/system/steamos-manager.service.d"
+printf '[Service]\nEnvironment=RUST_LOG=info,steamos_manager::sls=off\n' >"$R/etc/systemd/system/steamos-manager.service.d/50-clawdeck-quiet-split-lock.conf"
+t_check '[ "$(t_state)" = os-fixed ]' "ClawDeck's drop-in is recognised: already done"
+t_check 'sh "$FIX" install >/dev/null 2>&1' "install doesn't fail for it"
+t_check '[ ! -e "$R$DROPIN" ]' "and writes nothing"
+
 t_new
 bazzite
 t_check '[ "$(t_state)" = off ]' "Bazzite (steamos-manager, no reporter): offered"

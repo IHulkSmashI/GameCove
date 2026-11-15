@@ -1261,6 +1261,122 @@ func test_installer_easy_and_custom_by_pad() -> void:
 	check("installer")
 
 
+## The d-pad only, no helper that aims at a control: Easy and Custom are radio cards (left/right moves the focus,
+## A picks), Down from a card is Continue, and the focus is always one control inside the installer.
+func test_installer_dpad_welcome_is_radio_and_one_focus() -> void:
+	var s := await open_installer(InstFakes.target("bazzite"))
+	var easy := func(): return s.body.find_child("Card_mode_easy", true, false)
+	var custom := func(): return s.body.find_child("Card_mode_custom", true, false)
+	ok(focused_in(easy.call()), "Welcome: focus starts on the first card")
+	eq(s.plan.mode, "easy", "Easy is the default pick")
+	await right()
+	ok(focused_in(custom.call()), "right: the focus moves to Custom")
+	eq(s.plan.mode, "easy", "moving the focus changes no pick")
+	await right()
+	ok(focused_in(custom.call()), "right again: no wrapping, no jump")
+	await down()
+	ok(focused_in(s.next_button), "down from a card: Continue")
+	await up()
+	ok(focus() != null and (focused_in(easy.call()) or focused_in(custom.call())), "up from Continue: back to a card")
+	await left()
+	await right()
+	ok(focused_in(custom.call()), "left then right: Custom again")
+	await a()
+	eq(s.plan.mode, "custom", "A picks Custom")
+	eq(s.plan.step, "welcome", "and stays on Welcome")
+	await left()
+	eq(s.plan.mode, "custom", "the pick stays while the focus walks back to Easy")
+	await a()
+	eq(s.plan.mode, "easy", "A on Easy picks it (radio: Custom is off)")
+	await close_installer(s)
+	check("installer welcome pad")
+
+
+## Pages of the installer by d-pad: the button row is walked in screen order (left to right, every button),
+## the Device radios change on A only, the Summary starts at its first row, and Extras scrolls to its last row.
+func test_installer_dpad_order_on_every_custom_page() -> void:
+	var s := await open_installer(InstFakes.target("bazzite"))
+	s.plan.set_mode("custom")
+	for step in ["startup", "steam", "stores", "device", "look", "art", "extras", "summary"]:
+		s.go(step)
+		await w.frames(6)
+		ok(focus() != null and s.is_ancestor_of(focus()), "%s: one focus inside the installer" % step)
+		# the button row left to right: every button is reachable with Left from Continue
+		var row: Array = []
+		for b in [s.skip_button, s.back_button, s.next_button]:
+			if b != null and is_instance_valid(b) and b.is_visible_in_tree() and not b.disabled:
+				row.append(b)
+		row.sort_custom(func(x, y): return x.get_global_rect().position.x < y.get_global_rect().position.x)
+		if row.size() > 1:
+			var f := row[row.size() - 1] as Control
+			f.grab_focus()
+			await w.frames(2)
+			for i in range(row.size() - 2, -1, -1):
+				await left()
+				ok(focused_in(row[i]), "%s: left walks the buttons in order (%s)" % [step, row[i].name])
+			for i in range(1, row.size()):
+				await right()
+				ok(focused_in(row[i]), "%s: right walks them back (%s)" % [step, row[i].name])
+	# Device: the d-pad never changes a radio, A does
+	s.go("device")
+	await w.frames(6)
+	var before := JSON.stringify(s.plan.choices)
+	for d in ["down", "right", "down", "left", "up", "right", "down"]:
+		await call(d)
+	eq(JSON.stringify(s.plan.choices), before, "Device: only moving about changed nothing")
+	# Summary: the focus starts on the first row, and Up from Install ends there
+	s.go("summary")
+	await w.frames(6)
+	var first: Control = focus()
+	ok(first != null and not focused_in(s.next_button), "Summary: focus starts in the list, not on Install")
+	var tries := 0
+	while not focused_in(s.next_button) and tries < 30:
+		await down()
+		tries += 1
+	ok(focused_in(s.next_button), "Summary: down reaches Install")
+	await up()
+	ok(focus() == first, "Summary: up from Install lands on the first row")
+	# Extras: down through everything; the last row ends up on screen (scroll follows focus)
+	s.go("extras")
+	await w.frames(6)
+	for i in 8:
+		await down()
+	var f2: Control = focus()
+	ok(f2 != null, "Extras: a focus after walking down")
+	if f2 != null:
+		var view: Rect2 = s.get_viewport_rect()
+		ok(view.encloses(f2.get_global_rect()), "Extras: the focused control is fully on screen")
+	await close_installer(s)
+	check("installer pad order")
+
+
+## Easy setup start to finish with nothing but the d-pad and A.
+func test_installer_easy_with_the_pad_only() -> void:
+	var s := await open_installer(InstFakes.target("bazzite"))
+	eq(s.plan.mode, "easy", "Easy is picked")
+	await a()
+	var seen := [s.plan.step]
+	for i in 14:
+		if s.plan.step == "done":
+			break
+		if s.plan.step == "progress":
+			await until(func(): return s.plan.step != "progress", 10000)
+			seen.append(s.plan.step)
+			continue
+		var n := 0
+		while not focused_in(s.next_button) and n < 14:
+			await down()
+			n += 1
+		ok(focused_in(s.next_button), "%s: down reaches the main button" % s.plan.step)
+		await a()
+		await w.frames(3)
+		seen.append(s.plan.step)
+	eq(s.plan.step, "done", "Easy ran to Done by pad only (%s)" % [seen])
+	ok(not s.installer.results.has("failed"), "every step worked (%s)" % [s.installer.results])
+	await close_installer(s)
+	check("installer easy pad only")
+
+
 func test_installer_remove_keeping_or_not_the_settings() -> void:
 	for keep in [true, false]:
 		var t := InstFakes.target("bazzite", {"installed": true, "maintenance": true, "state": {"version": "0.2.0", "method": "rpm-ostree", "fixes": []}})

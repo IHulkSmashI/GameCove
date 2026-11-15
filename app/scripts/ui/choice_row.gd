@@ -50,6 +50,17 @@ var _badge_box: HBoxContainer
 ## Optional card look for the row (and its line when carded) instead of the
 ## theme's RowButton box, e.g. the quick menu's tinted per-game switch.
 var card_box: StyleBox
+## Left / right step through the values (settings pages). Off in the installer: a choice there changes only on
+## A, and the d-pad only moves focus between controls and columns.
+var step_on_pad := true:
+	set(v):
+		step_on_pad = v
+		# the focus walk reads this: left / right are its value only while it steps on the pad
+		if button != null and _left != null:
+			if v:
+				button.set_meta("ux_stepper", true)
+			else:
+				button.remove_meta("ux_stepper")
 
 
 func setup(setting_key: String, title: String, vals: Array, lbls: Array, current: Variant, icon := "") -> void:
@@ -338,9 +349,10 @@ func _draw() -> void:
 		draw_style_box(ThemeLib.row_focus(), r)
 
 
-## True for the "‹ Value ›" kind: left / right step it.
+## True for the "‹ Value ›" kind where left / right step it (not where the
+## host made it change on A only: step_on_pad).
 func is_stepper() -> bool:
-	return _left != null
+	return _left != null and step_on_pad
 
 
 func _on_gui_input(event: InputEvent) -> void:

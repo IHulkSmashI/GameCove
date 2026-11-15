@@ -262,6 +262,17 @@ theirs() {
 	return 0
 }
 
+# ClawDeck's own corrected EDID (/etc/firmware/edid/clawdeck-<panel>-30-120.bin, set as drm.edid_firmware on the
+# kernel command line, the next boot's, the running drm module or /etc/default/grub): the screen already has its
+# 30-120 Hz range from there. Recognised, never an "another EDID override" refusal and never replaced behind its
+# back: the fix reports "already set up by ClawDeck" and leaves it alone.
+clawdeck_edid() {
+	for _v in "$(karg_value drm.edid_firmware "$(cmdline)")" "$(karg_value drm.edid_firmware "$(karg_pending)")" "$(drm_param)" "$(grub_other_edid)"; do
+		case $_v in *clawdeck-*) return 0 ;; esac
+	done
+	return 1
+}
+
 # The drm parameter as the running kernel has it ("" when unset or unreadable).
 drm_param() { tr -d '\n' <"$ROOT$DRM_PARAM" 2>/dev/null || true; }
 
@@ -382,6 +393,10 @@ install() {
 		return 0
 	fi
 	claw_board || die "this fix is only for the MSI Claw (boards MS-1T*); this board is '$(board_name)'"
+	if clawdeck_edid; then
+		say "already set up by ClawDeck: its corrected screen description (30-120 Hz) is in use, so there's nothing to change here"
+		return 0
+	fi
 	backend=$(boot_backend)
 	case $backend in
 	rpm-ostree) ;;
@@ -563,7 +578,10 @@ status() {
 	say "boot_switch=$(switch_set && echo yes || echo no)"
 	say "after_update=$after_update"
 	say "kill_switch=$(kill_switch && echo on || echo off)"
-	if theirs "$booted"; then
+	if [ "$installed" = no ] && clawdeck_edid; then
+		say "set_up_by=ClawDeck"
+		say "state=clawdeck"
+	elif theirs "$booted"; then
 		say "state=other-override"
 	elif [ "$installed" = yes ] && [ "$after_update" = no ] && [ "$range" = "$LO $HI" ] && [ -n "$booted" ]; then
 		say "state=on"

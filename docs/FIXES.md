@@ -145,6 +145,15 @@ records the fix as undone so a later repair or update of GameCove doesn't put it
   administrator-password action as Apply and Undo. No new polkit action, daemon or timer.
 - Act during a game.
 
+**ClawDeck.** On the MSI Claw 8 EX, ClawDeck's InputPlumber override (header "ClawDeck override of the stock file"),
+its capability map `msiclaw_claw8ex`, its EDID `clawdeck-csw0801-30-120.bin` and its steamos-manager drop-in
+`50-clawdeck-quiet-split-lock.conf` are recognised. Applying the fix adopts the override after copying it to
+`/var/lib/gamecove/backup/clawdeck/`, the fix's record names it (`clawdeck`), and Undo puts ClawDeck's file back.
+The VRR fix reports `state=clawdeck` ("already set up by ClawDeck") and changes nothing.
+
+**Installer.** The installer runs every fix in one root script behind a single `pkexec`. A fix that fails is
+skipped, listed on the last page and can be retried one by one; it never stops the rest.
+
 **Gaming Mode.** GameCove's own session has no polkit agent, so nothing can ask for the password
 there, and GameCove adds no new root action to get round that. The change then waits: the fix shows
 "Your system does this itself now" with **Remove now**, and the removal runs the next time GameCove
