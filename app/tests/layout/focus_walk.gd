@@ -141,6 +141,11 @@ static func scan(root: Window, ctx := {}) -> Dictionary:
 		for di in 4:
 			if not is_instance_valid(c.node) or not c.node.is_visible_in_tree():
 				break
+			# a slider's or stepper's left / right is its value, not a move (CUX-3; suite_controller_ux.gd
+			# checks it with real presses). A value can also rebuild the rows it rules (an LED effect's
+			# colours, Deals' store) a frame later, which a walk without frames would never see come back.
+			if di >= 2 and _is_stepper(c.node):
+				continue
 			c.node.grab_focus()
 			_finish_tweens(root)
 			if root.gui_get_focus_owner() != c.node:
@@ -157,9 +162,6 @@ static func scan(root: Window, ctx := {}) -> Dictionary:
 			if not gone.is_empty():
 				# a tab, or a press onto one (a master list's row shows its own detail when it takes focus)
 				var tab := _is_tab(c.node) or (g != null and is_instance_valid(g) and _is_tab(g))
-				# a stepper's value can rebuild what it filters (Deals' store): its own value, put back below
-				if _is_stepper(c.node) and di >= 2 and changed.any(func(x): return is_instance_valid(x) and (x == c.node or (x as Node).is_ancestor_of(c.node))):
-					tab = true
 				if not tab:
 					_add(problems, "pad-action", c.node, "%s here changed the screen (%s no longer shows)" % [d["name"], _where(gone[0])])
 				# put the screen back: the opposite press (tabs), else stop walking this screen
@@ -175,20 +177,21 @@ static func scan(root: Window, ctx := {}) -> Dictionary:
 			if not changed.is_empty():
 				var node := c.node
 				var own := changed.any(func(x): return x == node or (x as Node).is_ancestor_of(node))
-				var allowed := (own and _is_stepper(node) and di >= 2) \
-					or (_is_tab(node) and changed.all(func(x): return is_instance_valid(x) and (_is_tab(x) or (g != null and (x as Node).is_ancestor_of(g))))) \
+				var allowed := (_is_tab(node) and changed.all(func(x): return is_instance_valid(x) and (_is_tab(x) or (g != null and (x as Node).is_ancestor_of(g))))) \
 					or (g != null and _is_tab(g) and changed.all(func(x): return is_instance_valid(x) and _is_tab(x)))
 				if not allowed:
 					_add(problems, "pad-value", node, "%s changed %s" % [d["name"], ", ".join(changed.map(func(x): return _where(x).right(50)))])
 				_restore(holders, before)
-				if own and _is_stepper(node) and di >= 2:
-					continue   # a stepper's left / right is its value, not a move
 			if g == null or not is_instance_valid(g):
 				_add(problems, "pad-lost", c.node, "%s leaves nothing focused" % d["name"])
 				continue
 			if g == c.node:
 				var near := _nearest_in_line(c, cands, d["v"])
-				if not near.is_empty() and not _is_stepper(c.node) and not swapped:
+				# a tab that isn't the open one holds focus here only because the walk put it there: a
+				# player reaches it with a press along the strip, which opens it (that page's own shot)
+				var unopened := _is_tab(c.node) and c.node is BaseButton and (c.node as BaseButton).toggle_mode \
+					and not (c.node as BaseButton).button_pressed
+				if not near.is_empty() and not _is_stepper(c.node) and not swapped and not unopened:
 					_add(problems, "pad-stuck", c.node, "%s goes nowhere though %s is right there" % [d["name"], _where(near[0].node)])
 				continue
 			var gc: Cand = by_node.get(g)
@@ -242,24 +245,40 @@ static var _last_occ: Array[Checks.Item] = []
 
 
 ## A control that wasn't on the list when the walk began (a panel rebuilt, a
-## scroller's row): on screen once its scrollers follow focus to it, and not
-## under a sheet?
+## scroller's row made as it scrolled in): on screen once its scrollers follow
+## focus to it, and not under something drawn over it? Judged like every other
+## control: by what is drawn after it, so the backdrop behind it doesn't count.
 static func _shows_now(g: Control, root: Window) -> bool:
 	if not g.is_visible_in_tree():
 		return false
-	var it := Checks.Item.new()
-	it.node = g
-	it.rect = g.get_global_rect()
-	it.order = 1 << 40   # judged against panels drawn over the whole screen only
-	var vis := _project(it.rect, _chain(g)).intersection(root.get_visible_rect())
-	if vis.size.x <= 0.0 or vis.size.y <= 0.0:
-		return false
-	for o in _last_occ:
-		if is_instance_valid(o.node) and o.node.is_visible_in_tree() and not o.node.is_ancestor_of(g) \
-				and (SCRIMS.any(func(x): return o.node.get_script() != null and o.node.get_script().resource_path.ends_with(x)) or o.node is ColorRect) \
-				and o.rect.grow(1.0).encloses(vis):
+	_lay_out(g)
+	var view := root.get_visible_rect()
+	var typed: Array[Checks.Item] = []
+	_collect(root, view, false, 1.0, typed, [0])
+	for it in typed:
+		if it.node != g:
+			continue
+		var vis := _project(it.rect, _chain(g)).intersection(view)
+		if vis.size.x <= 0.0 or vis.size.y <= 0.0:
 			return false
-	return true
+		return not _under(it, vis, Checks._occluders(typed))
+	return false   # faded out, or cut away by a parent that doesn't scroll
+
+
+## Rows made by a press sit where they were made until the next frame lays them
+## out, and the walk has no frames: the containers above `g` (up to its scroller)
+## place their children now, outermost first.
+static func _lay_out(g: Control) -> void:
+	var boxes := []
+	var p := g.get_parent()
+	while p != null and not p is Window:
+		if p is Container:
+			boxes.push_front(p)
+		if p is ScrollContainer:
+			break
+		p = p.get_parent()
+	for b in boxes:
+		(b as Container).notification(Container.NOTIFICATION_SORT_CHILDREN)
 
 
 ## Every control on screen that takes focus (pad or touch), not under a sheet;
@@ -549,9 +568,11 @@ static func _in_line(c: Cand, cands: Array[Cand], v: Vector2) -> Array:
 			continue   # mostly overlapping along the axis: not "ahead"
 		if _overlap_across(a, b, v) > minf(8.0, minf(_across(a, v), _across(b, v)) * 0.25):
 			out.append(x)
-	# inside a scrolling list the list comes first: up / down go along it and leave it only at its ends
-	if c.in_scroll != null:
-		var same := out.filter(func(x): return x.in_scroll == c.in_scroll)
+	# inside a scrolling list the list comes first: up / down go along it (and the lists inside it:
+	# a page of shelves) and leave it only at its ends
+	for i in range(c.chain.size() - 1, -1, -1):   # its own list first, then the page of lists around it
+		var sc: Variant = c.chain[i]
+		var same := out.filter(func(x): return sc in x.chain)
 		if not same.is_empty():
 			return same
 	return out
@@ -826,7 +847,10 @@ static func _restore(holders: Array, before: Array) -> void:
 		elif n is OptionButton:
 			(n as OptionButton).select(int(v))
 		elif n is BaseButton:
-			(n as BaseButton).button_pressed = bool(v)
+			# a tab's lit state belongs to its strip (the app sets it with the page it shows): setting it
+			# here left a strip saying "About" over the Storage page for the next shot
+			if not _is_tab(n):
+				(n as BaseButton).button_pressed = bool(v)
 		elif n is TabBar:
 			(n as TabBar).current_tab = int(v)
 		elif n is TabContainer:
