@@ -55,7 +55,8 @@ func test_welcome_layout_two_cards_then_the_buttons() -> void:
 	eq(n[1]["right"], -1, "nothing right of Custom: no wrapping")
 	eq(n[0]["down"], 4, "down from a card: Continue")
 	eq(n[1]["down"], 4)
-	eq(n[4]["up"], 0, "up from Continue: the first item at the top")
+	eq(n[4]["up"], 1, "up from Continue: the card right above it (Custom)")
+	eq(n[2]["up"], 0, "up from Skip: the card above it (Easy)")
 	eq(n[4]["left"], 3, "left from Continue: Back, the one beside it (not Skip)")
 	eq(n[3]["left"], 2, "then Skip")
 	eq(n[2]["right"], 3)
@@ -148,6 +149,24 @@ func test_every_page_links_its_buttons_in_the_order_they_sit() -> void:
 	_free(s)
 
 
+func test_up_from_the_buttons_goes_to_the_lowest_control_above() -> void:
+	# two columns of rows; the left one is longer. Under the page Back | Continue on the right.
+	var kinds := [Nav.ITEM, Nav.ITEM, Nav.ITEM, Nav.ITEM, Nav.NAV, Nav.NAV]
+	var rects := [_r(0, 100, 500, 60), _r(0, 200, 500, 60), _r(0, 300, 500, 60), _r(600, 100, 500, 60),
+		_r(700, 700, 112, 50), _r(830, 700, 200, 50)]
+	var n := Nav.neighbors(kinds, rects)
+	eq(n[5]["up"], 3, "up from Continue: the only control in its column, however high")
+	eq(n[4]["up"], 3, "up from Back: the same")
+	# nothing in the buttons' column: the lowest control nearest to them
+	rects[3] = _r(0, 400, 500, 60)
+	n = Nav.neighbors(kinds, rects)
+	eq(n[5]["up"], 3, "no control above the button: the lowest one on the page")
+	# a long page: its last card sits past the buttons until the page scrolls; it is still the one above them
+	rects[3] = _r(0, 1100, 1100, 200)
+	n = Nav.neighbors(kinds, rects)
+	eq(n[5]["up"], 3, "the page's last card, though it is scrolled below the buttons")
+
+
 # ---- choices change on A only -------------------------------------------------------------------
 
 func _press(row: Object, action: String) -> void:
@@ -175,12 +194,20 @@ func test_the_installer_d_pad_never_changes_a_choice() -> void:
 		r.button.pressed.emit()
 		ok(r.value() != before or r.values.size() < 2, r.name + " changes on A")
 	_free(s)
-	# settings pages keep stepping with left / right
+	# on settings pages a "‹ value ›" stepper keeps stepping with left / right (CUX-3) ...
 	var plain: VBoxContainer = ChoiceRow.new()
-	plain.setup("x", "X", [1, 2, 3], ["1", "2", "3"], 1)
+	plain.setup("x", "X", [1, 2, 3, 4, 5], ["1", "2", "3", "4", "5"], 1)
+	ok(plain.is_stepper(), "five values: a stepper")
 	_press(plain, "ui_right")
-	eq(plain.value(), 2, "settings pages still step with the d-pad")
+	eq(plain.value(), 2, "a settings stepper still steps with the d-pad")
 	plain.free()
+	# ... and a segmented choice changes on A only, there too
+	var seg: VBoxContainer = ChoiceRow.new()
+	seg.setup("y", "Y", [1, 2, 3], ["1", "2", "3"], 1)
+	ok(not seg.is_stepper(), "three short values: segments")
+	_press(seg, "ui_right")
+	eq(seg.value(), 1, "segments don't change on the d-pad")
+	seg.free()
 
 
 # ---- what can't be used takes no focus ----------------------------------------------------------

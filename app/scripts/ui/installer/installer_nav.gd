@@ -6,7 +6,7 @@ extends RefCounted
 ##    nothing further that way, to the next column (the control nearest in height); never wrapping.
 ##  - Up / Down move to the nearest row above / below, in the same column when there is one there.
 ##  - The buttons under the page (Back, Skip, Continue; kind NAV) are one row below everything: Down from the
-##    last row goes to Continue (the primary one), Up from them to the first control at the top of the page.
+##    last row goes to Continue (the primary one), Up from them to the control right above (the lowest one in that button's column).
 ##
 ## A control never moves anything but focus: nothing here changes a choice (that is A's job).
 
@@ -30,7 +30,7 @@ static func neighbors(kinds: Array, rects: Array) -> Array:
 		d["left"] = _sideways(i, pool, rects, -1)
 		d["right"] = _sideways(i, pool, rects, 1)
 		if kinds[i] == NAV:
-			d["up"] = items[0] if not items.is_empty() else -1
+			d["up"] = _above_nav(i, items, rects)
 		else:
 			d["up"] = _vertical(i, items, rects, -1)
 			d["down"] = _vertical(i, items, rects, 1)
@@ -89,6 +89,32 @@ static func _sideways(i: int, pool: Array, rects: Array, dir: int) -> int:
 			best = j
 			best_dy = dy
 			best_d = dx2
+	return best
+
+
+## Up from a button under the page: the control right above it (the lowest one in the button's own
+## column; where the column is empty, the lowest one nearest to it), the way every other press goes to
+## what is nearest (docs/CONTROLLER-UX.md CUX-5).
+static func _above_nav(i: int, items: Array, rects: Array) -> int:
+	if items.is_empty():
+		return -1
+	var r: Rect2 = rects[i]
+	# every control of the page is above the buttons, also the ones a long page has scrolled below them
+	var from: Array = items.filter(func(j): return _col_overlap(r, rects[j]) > 0.0)
+	if from.is_empty():
+		from = items
+	var low := -INF
+	for j in from:
+		low = maxf(low, (rects[j] as Rect2).end.y)
+	var best := -1
+	var best_dx := INF
+	for j in from:
+		if low - (rects[j] as Rect2).end.y > 12.0:
+			continue
+		var dx := absf(_cx(rects[j]) - _cx(r))
+		if dx < best_dx:
+			best = j
+			best_dx = dx
 	return best
 
 

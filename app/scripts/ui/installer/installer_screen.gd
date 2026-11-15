@@ -16,6 +16,7 @@ extends Control
 
 const TFix := preload("res://scripts/ui/texts_fixes.gd")
 const Kit := preload("res://scripts/ui/ui_kit.gd")
+const TouchTargets := preload("res://scripts/ui/touch_targets.gd")
 const SKit := preload("res://scripts/ui/settings/kit.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
 const Themes := preload("res://theme/themes.gd")
@@ -173,6 +174,9 @@ func prefetch_photo() -> bool:
 ## as the app (1920x1200 lays out at 1536x960), so the installer's type
 ## matches the main screens.
 func _enter_tree() -> void:
+	# 48 px touch targets (CUX-13), as in the app: the installer also runs on its own, without main.gd
+	if get_tree().root.find_child("TouchTargets", true, false) == null:
+		add_child(TouchTargets.attach(get_tree()), false, Node.INTERNAL_MODE_BACK)
 	var w := get_window()
 	if w == null or not is_instance_valid(w):
 		return
