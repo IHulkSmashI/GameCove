@@ -68,6 +68,15 @@ func test_seed_112003_b_and_guide_get_home() -> void:
 	await without_stores()
 
 
+## 121003 ended on Home with nothing focused, on the installer branch before the controller rules landed. With them
+## (a closing sheet lets focus go, every screen puts focus somewhere) the same seed replays clean; kept so it stays so.
+func test_seed_121003_home_keeps_something_focused() -> void:
+	await with_stores()
+	stores.set_speed(0.05)
+	await journey(121003)
+	await without_stores()
+
+
 ## One journey of STEPS moves from `seed`; true when an invariant broke (reported through ok()).
 func journey(seed: int) -> bool:
 	print("E2E SEED suite_monkey::journey %d" % seed)
