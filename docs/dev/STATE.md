@@ -10,7 +10,7 @@ Each session takes the top unchecked milestone, finishes it and ticks it here. L
   - The gyro fix is applied. ClawDeck's InputPlumber device file was moved to `/var/lib/clawdeck-backup-<time>/`; to restore it, move it back to `/etc/inputplumber/devices.d/`.
   - No other fix and no boot choice is applied, so it still boots as before.
 - **ClawDeck** (`github.com/IHulkSmashI/ClawDeck`, AGPLv3, all the owner's own work, so its code may come into GameCove under GPL-3.0): port from it instead of writing again. All of it applies to the MSI Claw 8 EX; most of it to other Intel handhelds with XMX (not the Claw-only fixes, such as the VRR one). Look first at `docs/HARDWARE-FINDINGS.md`, `py_modules/clawdeck` and `tools/` (gyro, cabinet-lzms, upstream watch).
-- **Pull requests from Claude sessions fail the `cla` check** (the commits are authored as "Claude", which isn't on the allowlist in `.github/workflows/cla.yml`). It doesn't gate main; the owner can add that author to the allowlist or sign on the PR.
+- **CI runs once per push:** on pull requests and on pushes to main; a newer push to a pull request cancels the older run. Sessions' commits (authored as `claude`) are on the CLA allowlist.
 
 ## Milestones
 - [x] **M1 Controller UX** (2026-11-15). `docs/CONTROLLER-UX.md` and the focus walk hold every screen on the five CI layouts; 48 px touch targets everywhere.

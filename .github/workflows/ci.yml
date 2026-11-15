@@ -1,8 +1,16 @@
 name: CI
 
+# Pushes to main (the release gate reads main's newest push run) and pull requests. A branch with
+# an open pull request used to run twice for every push; a newer push to a pull request stops the
+# run of the one before it.
 on:
   push:
+    branches: [main]
   pull_request:
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

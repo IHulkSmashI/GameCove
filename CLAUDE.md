@@ -8,7 +8,7 @@ GameCove is a GPL-3.0, Godot 4.7.2 (GDScript), controller-first home screen for 
 1. One milestone per session. Read `docs/dev/STATE.md`, take the top unchecked milestone, and don't start a second one.
 2. Plan in a few lines. If the milestone is unclear or costly to redo, ask the owner one question; otherwise go.
 3. Build. Locally run only: `--import`, the unit tests, the start check, and the targeted tests for what you touched.
-4. Push a branch (never main), and let GitHub CI run the heavy suites (full e2e, layout + focus walk, packaging). Read the run once it's done. Don't poll, and don't run those suites locally.
+4. Push a branch (never main), open a draft pull request, and let GitHub CI run the heavy suites (full e2e, layout + focus walk, packaging). CI runs on pull requests and on main, not on bare branch pushes. Read the run once it's done. Don't poll, and don't run those suites locally. Push in batches: every push runs CI again and a red run emails the owner, so fix what a run found, check it locally, then push once.
 5. When CI is green: merge to main, tick the milestone in `docs/dev/STATE.md`, and write one short report to the owner: what changed, plus anything he must look at or approve.
 - Don't spawn helper agents unless the owner asks. Don't schedule repeating check-ins.
 
