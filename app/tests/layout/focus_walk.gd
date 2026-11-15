@@ -309,6 +309,12 @@ static func candidates(root: Window, scope: Node = null) -> Array[Cand]:
 			vis = _project(it.rect, _chain(n)).intersection(view)
 			if vis.size.x <= 0.0 or vis.size.y <= 0.0:
 				continue
+		elif sc != null and (vis.size.x + 1.0 < it.rect.size.x or vis.size.y + 1.0 < it.rect.size.y):
+			# cut by its scroller's edge: the sliver that shows may sit under the "More below" fade, but
+			# the row is a scroll away like the ones past it, not gone
+			var whole := _project(it.rect, _chain(n)).intersection(view)
+			if whole.size.x > 0.0 and whole.size.y > 0.0:
+				vis = whole
 		if _under(it, vis, occ):
 			continue
 		var c := Cand.new()
