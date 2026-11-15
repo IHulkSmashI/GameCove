@@ -114,6 +114,19 @@ static func fallback_colors(key: String) -> Array[Color]:
 	return [a, b]
 
 
+## Two colours for a desktop app's card, from its icon's vibrant colour: the
+## same hue, dark and muted, so the icon is the only bright thing on the card
+## (Steam Big Picture and Android's adaptive icons do the same). Grey or
+## unknown icons get a neutral slate. Never the random fallback hues.
+static func app_card_colors(icon_color: Color) -> Array[Color]:
+	if icon_color.a <= 0.0:
+		return [Color(0.11, 0.12, 0.14), Color(0.2, 0.21, 0.24)]
+	var sat := minf(icon_color.s, 0.6)
+	var a := Color.from_hsv(icon_color.h, sat * 0.75, 0.2)
+	var b := Color.from_hsv(icon_color.h, sat * 0.85, 0.38)
+	return [a, b]
+
+
 ## djb2: String.hash() can change between Godot versions; this can't.
 static func _stable_hash(s: String) -> int:
 	var h := 5381
