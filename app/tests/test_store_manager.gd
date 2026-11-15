@@ -214,6 +214,30 @@ func test_non_steam_compat_through_launcher() -> void:
 	_done(m)
 
 
+## Controls asks for a game's launch options on its worker thread while a scan's result replaces the
+## entry table on the main thread: the lookup takes the table's lock (without it the app aborted in
+## the e2e journeys, once, on a busy machine).
+func test_the_entry_lookup_waits_for_the_table_lock() -> void:
+	var lib: Node = LibraryScript.new()
+	var m := StoreManager.new(FakeRunner.new())
+	lib.attach_store(m)
+	lib._entries = {"steam:1": {"key": "steam:1", "store": "steam", "id": "1"}}
+	var got := [{}]
+	var done := [false]
+	lib._entries_lock.lock()
+	var t := Thread.new()
+	t.start(func():
+		got[0] = m.entry_lookup.call("steam:1")
+		done[0] = true)
+	OS.delay_msec(60)
+	eq(done[0], false, "while the table is being replaced the worker's lookup waits")
+	lib._entries_lock.unlock()
+	t.wait_to_finish()
+	eq(done[0], true, "and goes on once it is free")
+	eq(str(got[0].get("id", "")), "1", "with the entry")
+	lib.free()
+
+
 func test_library_forwards_and_merges() -> void:
 	var lib: Node = LibraryScript.new()
 	var m := StoreManager.new(FakeRunner.new())

@@ -51,6 +51,10 @@ var emulation: Dictionary = Emu.empty_setup()
 var home := OS.get_environment("HOME")
 
 var _entries := {}            # key -> full store entry (launch details live here)
+## Controls reads a game's launch options on its worker thread (through the store's entry_lookup)
+## while a scan's result swaps the table on the main thread: both hold this, or the worker read a
+## table that was being replaced and the app aborted.
+var _entries_lock := Mutex.new()
 var _tools := {}
 var _task := -1
 var _again := false
@@ -96,7 +100,11 @@ func attach_store(manager: Node) -> void:
 	store = manager
 	store.name = "Store"
 	add_child(store)
-	store.entry_lookup = func(key: String) -> Dictionary: return _entries.get(key, {})
+	store.entry_lookup = func(key: String) -> Dictionary:
+		_entries_lock.lock()
+		var e: Dictionary = _entries.get(key, {})
+		_entries_lock.unlock()
+		return e
 	store.launcher = get_node_or_null("/root/Launcher") if is_inside_tree() else null
 	store.download_progress.connect(func(k, d, t, r, e): download_progress.emit(k, d, t, r, e))
 	store.install_state_changed.connect(func(k, s): install_state_changed.emit(k, s))
@@ -240,11 +248,15 @@ func take(result: Dictionary, store_name: String) -> void:
 					fresh_entries[k] = _entries[k]
 			_sort(fresh_games)
 		games = fresh_games
+		_entries_lock.lock()
 		_entries = fresh_entries
+		_entries_lock.unlock()
 	elif not same:
 		var merged := merge_store(games, _entries, result, store_name)
 		games = merged["games"]
+		_entries_lock.lock()
 		_entries = merged["entries"]
+		_entries_lock.unlock()
 	if result.has("emulation"):
 		if not same:
 			emulation = result["emulation"]
