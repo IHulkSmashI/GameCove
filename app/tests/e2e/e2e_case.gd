@@ -86,6 +86,25 @@ func b() -> void:
 	await press(JOY_BUTTON_B)
 
 
+## Changes the focused control one step the way a player does
+## (docs/CONTROLLER-UX.md CUX-3): left / right on a slider or a "‹ value ›"
+## stepper (and on rows that aren't ChoiceRows: colour swatches, curves); A on
+## a switch or segmented ChoiceRow, which only steps forward, so `dir` -1 there
+## goes round to the value before.
+func change(dir := 1) -> void:
+	var f := focus()
+	var row: Node = f.get_parent() if f != null else null
+	if f is Slider or row == null or not row.has_method("is_stepper") or row.is_stepper():
+		if dir > 0:
+			await right()
+		else:
+			await left()
+		return
+	var n: int = 1 if dir > 0 else maxi(1, row.values.size() - 1)
+	for i in n:
+		await a()
+
+
 func up() -> void:
 	await press(JOY_BUTTON_DPAD_UP)
 

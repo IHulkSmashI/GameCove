@@ -150,6 +150,122 @@ static func link_vertical(controls: Array, top: Control = null) -> void:
 		c.focus_neighbor_right = c.get_path_to(c)
 
 
+## Up / down through `items` (top to bottom, as built) for a column of cards:
+## controls side by side in one box row (a card's button row) count as one row,
+## so up / down go to the row above's or below's first control and left / right
+## walk along the row. Left / right off a row's ends are left to Godot's own
+## search (the nearest control that way: the next column), never "stay put";
+## up from the first row goes to `top`, down from the last stays
+## (docs/CONTROLLER-UX.md CUX-5).
+static func link_rows(items: Array, top: Control = null) -> void:
+	var rows: Array = []
+	for c in items:
+		var p: Node = (c as Control).get_parent()
+		if not rows.is_empty() and (p is HBoxContainer or p is FlowContainer) and rows[-1][0].get_parent() == p:
+			rows[-1].append(c)
+		else:
+			rows.append([c])
+	for r in rows.size():
+		var row: Array = rows[r]
+		var up: Control = rows[r - 1][0] if r > 0 else top
+		var down: Control = rows[r + 1][0] if r + 1 < rows.size() else null
+		# chips in a flow wrap onto more lines: where each one sits decides, so Godot's own search
+		var flow: bool = row[0].get_parent() is FlowContainer and row.size() > 1
+		for i in row.size():
+			var c: Control = row[i]
+			if flow:
+				# along its line and to the line above or below, by where the chips sit at the press;
+				# off the flow's first or last line: the row above or below; a line's ends stay
+				c.focus_neighbor_left = c.get_path_to(c)
+				c.focus_neighbor_right = c.get_path_to(c)
+				c.focus_neighbor_top = c.get_path_to(up if up != null else c)
+				c.focus_neighbor_bottom = c.get_path_to(down if down != null else c)
+				c.set_meta("flow_items", row)
+				if not c.has_meta("flow_wired"):
+					c.set_meta("flow_wired", true)
+					c.gui_input.connect(_flow_input.bind(c))
+				continue
+			c.focus_neighbor_top = c.get_path_to(up if up != null else c)
+			c.focus_neighbor_bottom = c.get_path_to(down if down != null else c)
+			c.focus_neighbor_left = c.get_path_to(row[i - 1]) if i > 0 else NodePath()
+			c.focus_neighbor_right = c.get_path_to(row[i + 1]) if i + 1 < row.size() else NodePath()
+
+
+static func _flow_input(event: InputEvent, c: Control) -> void:
+	if c.get_viewport() == null or c.get_viewport().is_input_handled():
+		return
+	var dirs := {"ui_left": Vector2.LEFT, "ui_right": Vector2.RIGHT, "ui_up": Vector2.UP, "ui_down": Vector2.DOWN}
+	for act in dirs:
+		if event.is_action_pressed(act, true):
+			var d: Vector2 = dirs[act]
+			var to := nearest_toward(c, c.get_meta("flow_items", []), d)
+			# left / right stay on the chip's own line
+			if to != null and d.x != 0.0 and absf(to.get_global_rect().get_center().y - c.get_global_rect().get_center().y) > c.size.y * 0.5:
+				to = null
+			if to != null:
+				c.accept_event()
+				to.grab_focus()
+			return
+
+
+## The control in `items` a press toward `dir` (Vector2.LEFT / RIGHT / UP / DOWN)
+## from `from` should reach, by where they are on screen now: ahead of `from`,
+## those overlapping its row (or column) first, then the nearest. null if none.
+## For containers whose layout decides (columns of cards, wrapping chips),
+## asked at the press so it is never stale (docs/CONTROLLER-UX.md CUX-5).
+static func nearest_toward(from: Control, items: Array, dir: Vector2) -> Control:
+	var a := from.get_global_rect()
+	var best: Control = null
+	var best_key := Vector3(INF, INF, INF)
+	for x in items:
+		var c := x as Control
+		if c == null or c == from or not is_instance_valid(c) or not c.is_visible_in_tree() or c.focus_mode != Control.FOCUS_ALL:
+			continue
+		var b := c.get_global_rect()
+		var along := (b.get_center() - a.get_center()).dot(dir)
+		if along <= 2.0:
+			continue
+		var gap: float
+		var overlap: float
+		if dir.x != 0.0:
+			gap = (b.position.x - a.end.x) if dir.x > 0 else (a.position.x - b.end.x)
+			overlap = minf(a.end.y, b.end.y) - maxf(a.position.y, b.position.y)
+		else:
+			gap = (b.position.y - a.end.y) if dir.y > 0 else (a.position.y - b.end.y)
+			overlap = minf(a.end.x, b.end.x) - maxf(a.position.x, b.position.x)
+		var across := absf((b.get_center() - a.get_center()).dot(Vector2(dir.y, dir.x)))
+		# in line first (overlapping), then nearest along, then nearest across
+		var key := Vector3(0.0 if overlap > 4.0 else 1.0, maxf(gap, 0.0) if overlap > 4.0 else across, across)
+		if key < best_key:
+			best_key = key
+			best = c
+	return best
+
+
+## Down from each of `buttons` goes to `target.call()` at the press (a screen's
+## or section's main control as it is now; a path set earlier goes stale when
+## the screen below changes: a new layout, another category). Wired once.
+static func lead_down(buttons: Array, target: Callable) -> void:
+	for b in buttons:
+		var c := b as Control
+		if c == null:
+			continue
+		c.set_meta("lead_down", target)
+		if not c.has_meta("lead_down_wired"):
+			c.set_meta("lead_down_wired", true)
+			c.gui_input.connect(_lead_down_input.bind(c))
+
+
+static func _lead_down_input(event: InputEvent, c: Control) -> void:
+	if not event.is_action_pressed("ui_down") or c.get_viewport() == null or c.get_viewport().is_input_handled():
+		return
+	var t: Callable = c.get_meta("lead_down")
+	var f: Variant = t.call() if t.is_valid() else null
+	if f is Control and is_instance_valid(f) and (f as Control).is_visible_in_tree() and (f as Control).focus_mode == Control.FOCUS_ALL:
+		c.accept_event()
+		(f as Control).grab_focus()
+
+
 ## Chain controls left to right; ends stop at themselves.
 static func link_horizontal(controls: Array) -> void:
 	for i in controls.size():
@@ -277,6 +393,18 @@ static func prompts(list: Array) -> HBoxContainer:
 		item.add_child(l)
 		row.add_child(item)
 	return row
+
+
+## The hint for what changes `f`: a slider or a "‹ value ›" stepper changes
+## with left / right; a switch or segmented row (ChoiceRow) on A; anything else
+## is A Select (docs/CONTROLLER-UX.md CUX-3, CUX-10).
+static func change_hint(f: Control) -> Array:
+	if f is Slider:
+		return ["LR", "Adjust"]
+	var p: Node = f.get_parent() if f != null else null
+	if p != null and p.has_method("is_stepper"):
+		return ["LR", "Change"] if p.is_stepper() else ["A", "Change"]
+	return ["A", "Select"]
 
 
 ## Plain text of a prompt row (tests, accessibility).

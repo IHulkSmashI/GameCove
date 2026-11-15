@@ -133,6 +133,7 @@ static func _autoload(n: String) -> Object:
 func _build_header() -> HBoxContainer:
 	var h := Kit.hbox(12)
 	h.name = "Header"
+	h.set_meta("ux_nav_bar", true)   # a press out of it lands on the screen's main control (docs/CONTROLLER-UX.md CUX-5)
 	var t := Kit.label(T.TITLE, "TitleLabel")
 	t.name = "Title"
 	h.add_child(t)
@@ -193,6 +194,8 @@ func _link_chips() -> void:
 	for c in list:
 		c.focus_neighbor_top = c.get_path_to(top_target if top_target != null else c)
 		c.focus_neighbor_bottom = c.get_path_to(below if below != null else c)
+	# the section below changes (Coming soon's list / month, a store picked): asked at the press (CUX-5)
+	Kit.lead_down(list, func(): return sections[current].default_focus() if page == null else null)
 
 
 ## The top-bar tab "up" leads to from the section chips.

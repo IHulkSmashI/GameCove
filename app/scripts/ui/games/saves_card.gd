@@ -88,6 +88,10 @@ func refresh() -> void:
 	var n: int = service.backup_list(key()).size()
 	_set_row(backups_button, TS.BACKUPS, TS.backup_count(n) if n > 0 else TS.NO_BACKUPS, "")
 	backups_button.disabled = n == 0
+	# "No backups" is a line to read, not a control: no focus by pad or touch (docs/CONTROLLER-UX.md CUX-7)
+	if n == 0 and backups_button.has_focus() and toggle_button.is_visible_in_tree():
+		toggle_button.grab_focus()
+	backups_button.focus_mode = Control.FOCUS_NONE if n == 0 else Control.FOCUS_ALL
 	_maybe_relink()
 
 
@@ -107,7 +111,7 @@ func a_hint(f: Control) -> String:
 func focusables() -> Array:
 	var out: Array = []
 	for b in [choose_button, toggle_button, sync_button, backups_button]:
-		if b != null and b.visible:
+		if b != null and b.visible and b.focus_mode != Control.FOCUS_NONE:
 			out.append(b)
 	return out
 

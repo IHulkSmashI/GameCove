@@ -427,12 +427,13 @@ func show_item(a: Dictionary, as_rarest := false) -> void:
 	detail_eyebrow.add_theme_color_override("font_color", ThemeLib.tone("gold"))
 
 
-## Up / down along the list; left / right stay put. The page links the edges.
+## Up / down along the list; left / right are Godot's own search (the card in
+## the next column), never stuck. The page links the edges.
 func _link() -> void:
 	for i in cells.size():
 		var c: Control = cells[i]
-		c.focus_neighbor_left = c.get_path_to(c)
-		c.focus_neighbor_right = c.get_path_to(c)
+		c.focus_neighbor_left = NodePath()
+		c.focus_neighbor_right = NodePath()
 		if i > 0:
 			c.focus_neighbor_top = c.get_path_to(cells[i - 1])
 		if i + 1 < cells.size():

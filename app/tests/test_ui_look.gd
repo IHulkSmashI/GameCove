@@ -209,8 +209,36 @@ func test_choice_row_segments() -> void:
 	ok(r.find_child("Segments", true, false) != null, "segmented control built")
 	eq(r.value_text(), "Auto", "value text kept")
 	r.step(1)
-	eq(r.value(), "max", "left/right still step")
+	eq(r.value(), "max", "A steps it")
 	r.free()
+
+
+## docs/CONTROLLER-UX.md CUX-3: only the "‹ value ›" stepper changes with left /
+## right; a switch and a segmented choice (radio-like) change on A alone, and
+## left / right move focus on (the Device screen's radios changed on Right).
+func test_choice_rows_change_sideways_only_as_steppers() -> void:
+	var right := InputEventAction.new()
+	right.action = "ui_right"
+	right.pressed = true
+	var seg: VBoxContainer = ChoiceRow.new()
+	seg.setup("fan", "Fan", ["quiet", "auto", "max"], ["Quiet", "Auto", "Max"], "auto")
+	var sw: VBoxContainer = ChoiceRow.bool_row("wifi", "Wi-Fi", true)
+	var st: VBoxContainer = ChoiceRow.new()
+	st.setup("fps", "Frame limit", [0, 30, 40, 45, 60, 90, 120], ["Off", "30", "40", "45", "60", "90", "120"], 60)
+	for r in [seg, sw]:
+		var before: Variant = r.value()
+		r._on_gui_input(right)
+		eq(r.value(), before, "%s: right doesn't change it" % r.key)
+		ok(not r.is_stepper() and not r.button.has_meta("ux_stepper"), "%s: not a stepper" % r.key)
+		r.button.pressed.emit()
+		ok(r.value() != before, "%s: A does" % r.key)
+	st._on_gui_input(right)
+	eq(st.value(), 90, "a stepper steps on right")
+	ok(st.is_stepper() and st.button.has_meta("ux_stepper"), "and says so (the focus walk holds it to it)")
+	eq(Kit.change_hint(st.button), ["LR", "Change"], "its hint: left / right")
+	eq(Kit.change_hint(sw.button), ["A", "Change"], "a switch's hint: A")
+	for r in [seg, sw, st]:
+		r.free()
 
 
 func test_big_screens_get_more_room() -> void:

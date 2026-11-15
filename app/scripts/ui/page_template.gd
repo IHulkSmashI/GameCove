@@ -613,18 +613,127 @@ func add_focusables(list: Array) -> void:
 func finish() -> void:
 	_linked = true
 	Kit.link_horizontal(actions)
-	var chain: Array = [actions[0]] if not actions.is_empty() else []
-	chain.append_array(focusables)
-	Kit.link_vertical(chain)
+	# The cards stand in columns: up / down run down each column (a card's button
+	# row is one row), left / right cross to the next column, up from a column's
+	# top reaches the action row (docs/CONTROLLER-UX.md CUX-5). One long chain
+	# made down at a column's foot jump up into the next one and left / right
+	# stay put.
+	var cols := {}
+	var order: Array = []
+	for c in focusables:
+		var col := _column_of(c)
+		if not cols.has(col):
+			cols[col] = []
+			order.append(col)
+		cols[col].append(c)
+	# full-width cards above the columns (a pending change) sit between the action row and the
+	# columns; full-width cards below them (a store page's credits) after the columns' feet
+	var top: Control = actions[0] if not actions.is_empty() else null
+	var pre: Array = []
+	var post: Array = []
+	for c in cols.get(self, []):
+		(pre if _above_columns(c) else post).append(c)
+	if not pre.is_empty():
+		Kit.link_rows(pre, top)
+		top = pre[-1]
+	for col in order:
+		if col != self:
+			Kit.link_rows(cols[col], top)
+	for c in pre:
+		if c.get_node_or_null(c.focus_neighbor_bottom) == c:
+			c.focus_neighbor_bottom = NodePath()   # the full-width row's foot: whatever column control is below it
+	if not post.is_empty():
+		Kit.link_rows(post, null)
+		for col in order:
+			if col != self and not cols[col].is_empty():
+				var foot: Control = cols[col][-1]
+				if foot.get_node_or_null(foot.focus_neighbor_bottom) == foot:
+					foot.focus_neighbor_bottom = foot.get_path_to(post[0])
+		var up: Control = null
+		for col in order:
+			if col != self and not cols[col].is_empty():
+				up = cols[col][-1]
+				break
+		for c in post:
+			if c.get_node_or_null(c.focus_neighbor_top) == c:
+				c.focus_neighbor_top = c.get_path_to(up) if up != null else NodePath()
+	# a full-width row has nothing beside it: left / right stay (Godot's search went up into the columns)
+	for c in pre + post:
+		if c.focus_neighbor_left == NodePath():
+			c.focus_neighbor_left = c.get_path_to(c)
+		if c.focus_neighbor_right == NodePath():
+			c.focus_neighbor_right = c.get_path_to(c)
+	# left / right off a column: the control in the next column nearest in height, found at the press
+	_col_chains = {}
+	for col in order:
+		if col != self:
+			_col_chains[col] = cols[col]
+			for c in cols[col]:
+				if not (c as Control).has_meta("card_wired"):
+					(c as Control).set_meta("card_wired", true)
+					(c as Control).gui_input.connect(_on_card_input.bind(c))
 	if not actions.is_empty():
+		actions[0].focus_neighbor_bottom = actions[0].get_path_to(focusables[0] if not focusables.is_empty() else actions[0])
+		actions[0].focus_neighbor_left = actions[0].get_path_to(actions[0])
 		actions[0].focus_neighbor_right = actions[0].get_path_to(actions[1] if actions.size() > 1 else actions[0])
 	for i in range(1, actions.size()):
 		var a: Control = actions[i]
 		a.focus_neighbor_top = a.get_path_to(a)
-		a.focus_neighbor_bottom = a.get_path_to(focusables[0] if not focusables.is_empty() else a)
+		# down from the other actions: the card control right below (Godot's search), not column 1's top
+		a.focus_neighbor_bottom = NodePath() if not focusables.is_empty() else a.get_path_to(a)
 		a.focus_neighbor_left = a.get_path_to(actions[i - 1])
 		a.focus_neighbor_right = a.get_path_to(actions[i + 1] if i + 1 < actions.size() else a)
 	_link_top_target()
+
+
+var _col_chains := {}
+
+
+func _on_card_input(event: InputEvent, c: Control) -> void:
+	if get_viewport() == null or get_viewport().is_input_handled() or columns == null:
+		return
+	var side := -1 if event.is_action_pressed("ui_left", true) else (1 if event.is_action_pressed("ui_right", true) else 0)
+	if side == 0 or c.get("focus_neighbor_left" if side < 0 else "focus_neighbor_right") != NodePath():
+		return   # not a sideways press, or the control's own row goes on that way
+	var col := _column_of(c)
+	var i := col.get_index() + side if col != self else -1
+	while i >= 0 and i < columns.get_child_count():
+		var to := Kit.nearest_toward(c, _col_chains.get(columns.get_child(i), []), Vector2(side, 0))
+		if to == null:
+			# nothing level with it: the one nearest in height
+			var best := INF
+			for x in _col_chains.get(columns.get_child(i), []):
+				if is_instance_valid(x) and x.is_visible_in_tree():
+					var dy := absf(x.get_global_rect().get_center().y - c.get_global_rect().get_center().y)
+					if dy < best:
+						best = dy
+						to = x
+		if to != null:
+			c.accept_event()
+			to.grab_focus()
+			return
+		i += side
+	c.accept_event()   # the last column: stays (never up into the action row)
+
+
+## A full-width card control above the columns (true) or below them.
+func _above_columns(c: Node) -> bool:
+	if columns == null or cards_box == null:
+		return true
+	var p := c
+	while p != null and p.get_parent() != cards_box:
+		p = p.get_parent()
+	return p == null or p.get_index() < columns.get_index()
+
+
+## The column (bento stack) a card control stands in, or the cards box itself.
+func _column_of(c: Node) -> Node:
+	var p := c
+	while p != null and p != self:
+		if columns != null and p.get_parent() == columns:
+			return p
+		p = p.get_parent()
+	return self
 
 
 ## D-pad up from the action row goes to `c` (main passes the top bar's tab).

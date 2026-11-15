@@ -511,7 +511,7 @@ func test_hints() -> void:
 	eq(h[1], ["B", "Home"], "category: B home")
 	var row: Button = s.rows["theme"].button
 	h = s.hints(row)
-	eq(h[0], ["LR", "Change"], "choice row: change")
+	eq(h[0], ["LR", "Change"] if s.rows["theme"].is_stepper() else ["A", "Change"], "choice row: change, the way that row changes")
 	eq(h[1], ["B", "Categories"], "in a page B goes back to the list")
 	var sl := HSlider.new()
 	eq(s.hints(sl)[0], ["LR", "Change"], "slider: left / right change it (the TDP slider)")

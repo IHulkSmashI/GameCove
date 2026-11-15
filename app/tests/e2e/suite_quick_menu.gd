@@ -68,7 +68,7 @@ func test_quick_controls_change_the_system() -> void:
 				var c := ctl(id)
 				if c != null and qm().model.blocked_reason(c) != "":
 					var b0: Variant = c.value
-					await right()
+					await change()
 					await w.idle()
 					ok(c.value == b0, "%s: %s is locked (%s) and stays" % [tab, id, qm().model.blocked_reason(c)])
 				elif c != null and c.available and c.kind != "action" and not id in ["network.airplane", "system.keep_awake"] \
@@ -76,12 +76,12 @@ func test_quick_controls_change_the_system() -> void:
 					var before: Variant = c.value
 					if c.kind == "slider":
 						if before != null and float(before) >= c.max_value - 0.0001:
-							await left()
+							await change(-1)
 						else:
-							await right()
+							await change(1)
 						await w.wait_s(0.35)
 					else:
-						await right()
+						await change(1)
 						if c.kind == "color":
 							await w.wait_s(0.5)   # ColorRow settles before it sends
 					await w.idle()

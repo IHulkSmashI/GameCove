@@ -5,7 +5,7 @@ extends "res://scripts/ui/discover/section.gd"
 ##          toggle beside it.
 ##   Month: a Monday-first month grid (days with releases are focusable and
 ##          show small covers where the cell is big enough, else the first
-##          titles and a dot with the count; today is ringed in the accent),
+##          titles and a dot with the count; today has an accent tint and bar),
 ##          with the focused day's games in a panel on the right; month and
 ##          quarter dates go under "Sometime this month".
 ## A game coming out today is highlighted. Y toggles Notify me anywhere.
@@ -156,6 +156,7 @@ func shift_month(by: int) -> void:
 func _build_list(col: VBoxContainer, cal: Array) -> void:
 	_scroll = W.scroller()
 	_scroll.follow_focus = false
+	_scroll.set_meta("ux_follows", "each row follows with widgets.follow")   # docs/CONTROLLER-UX.md CUX-8
 	col.add_child(_scroll)
 	var list := Kit.vbox(10)
 	list.name = "List"
@@ -236,11 +237,12 @@ static func _sub(r: Dictionary) -> String:
 	return "  ·  ".join(bits)
 
 
-## Today (and a game out today in the list): ringed in the accent.
+## Today (and a game out today in the list): an accent tint and a bar along the
+## bottom, never a ring: the ring is focus alone (docs/CONTROLLER-UX.md CUX-1, CUX-2).
 func _highlight(b: Button) -> void:
-	var sb := ThemeLib.box(Color(ThemeLib.color("accent"), 0.08), ThemeLib.radius("m"), 18, 10)
+	var sb := ThemeLib.box(Color(ThemeLib.color("accent"), 0.10), ThemeLib.radius("m"), 18, 10)
 	sb.border_color = ThemeLib.color("accent")
-	sb.set_border_width_all(2)
+	sb.border_width_bottom = 3
 	b.add_theme_stylebox_override("normal", sb)
 	b.set_meta("today", true)
 
@@ -427,6 +429,9 @@ func _day_cell(day: int, rels: Array, h: int, is_today: bool) -> Control:
 	else:
 		day_buttons[day] = b
 		b.focus_entered.connect(func(): _show_panel(day))
+		# the panel beside shows the focused day's games: a master list (docs/CONTROLLER-UX.md CUX-3)
+		b.set_meta("ux_tab", true)
+		b.gui_input.connect(_on_day_input.bind(b))
 		b.pressed.connect(func():
 			if rels.size() == 1:
 				ctx.open_page(_view_for(rels[0]))
@@ -435,6 +440,25 @@ func _day_cell(day: int, rels: Array, h: int, is_today: bool) -> Control:
 	if is_today:
 		_highlight(b)
 	return b
+
+
+## Left / right from a day: the next day with games in its week first, else
+## the panel beside (Godot's own search went up to the toolbar from a day whose
+## neighbours have no games).
+func _on_day_input(event: InputEvent, b: Button) -> void:
+	var side := -1 if event.is_action_pressed("ui_left", true) else (1 if event.is_action_pressed("ui_right", true) else 0)
+	if side == 0:
+		return
+	var pool: Array = day_buttons.values()
+	if undated_button != null:
+		pool.append(undated_button)
+	if side > 0:
+		for pr in panel_rows:
+			pool.append(pr[0])
+	var to := Kit.nearest_toward(b, pool, Vector2(side, 0))
+	b.accept_event()
+	if to != null:
+		to.grab_focus()
 
 
 ## After layout: covers when the cell has room, titles otherwise. Rebuilt only
@@ -580,6 +604,9 @@ func _link() -> void:
 	for b in bar:
 		b.focus_neighbor_top = b.get_path_to(top_target if top_target != null else b)
 		b.focus_neighbor_bottom = b.get_path_to(below if below != null else b)
+	# Month: the credit sits over the day panel, so down from it is whatever is right below it
+	if layout != "list" and credit_button != null:
+		credit_button.focus_neighbor_bottom = NodePath()
 	if empty_card != null:
 		var eb: Array = empty_card.get_meta("buttons")
 		for b in eb:

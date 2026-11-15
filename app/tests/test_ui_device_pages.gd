@@ -136,7 +136,7 @@ func test_controller_rows_drive_the_service() -> void:
 	ok(ctl.calls.has("game_profile steam:976730 true"), "per-game layout")
 	ok(p.find_child("Card_lights", true, false) != null, "lights card, read-only")
 	ok(_texts(p).contains(Texts.LED_LINE), "says lights can't be changed")
-	eq(p.hints_for(p.rows["rumble"].button), [["LR", "Change"], ["B", "Back"]], "row hints")
+	eq(p.hints_for(p.rows["rumble"].button), [["A", "Change"], ["B", "Back"]], "a switch row: A changes it (docs/CONTROLLER-UX.md CUX-3)")
 	_done(p, s)
 
 

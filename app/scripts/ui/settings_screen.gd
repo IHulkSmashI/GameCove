@@ -16,6 +16,7 @@ extends Control
 ## Overlays it owns: the store sign-in sheet (QR code + code entry), the credits
 ## viewer and the on-screen keyboard for keys and codes.
 
+const FocusTrap := preload("res://scripts/ui/focus_trap.gd")
 const FocusScroll := preload("res://scripts/ui/focus_scroll.gd")
 const FadeMask := preload("res://scripts/ui/fade_mask.gd")
 const Kit := preload("res://scripts/ui/ui_kit.gd")
@@ -227,6 +228,7 @@ func _build() -> void:
 	cols.add_child(list_scroll)
 	var list := Kit.vbox(3)
 	list.name = "Categories"
+	list.set_meta("ux_nav_bar", true)   # a press out of it lands on the screen's main control (docs/CONTROLLER-UX.md CUX-5)
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list_scroll.add_child(list)
 	# On a small screen the category list is longer than the screen: the same
@@ -341,6 +343,8 @@ func _category_button(id: String) -> Button:
 	b.add_theme_stylebox_override("pressed", chosen)
 	b.add_theme_stylebox_override("hover_pressed", chosen)
 	b.focus_entered.connect(func(): show_category(id))
+	# a side tab strip: the page beside follows focus (docs/CONTROLLER-UX.md CUX-3, Android TV side navigation)
+	b.set_meta("ux_tab", true)
 	b.pressed.connect(func():
 		b.set_pressed_no_signal(true)
 		enter_page())
@@ -482,7 +486,8 @@ func in_page() -> bool:
 static func changes_with_lr(f: Control) -> bool:
 	if f is Slider:
 		return f.editable
-	return f is Button and f.theme_type_variation == "RowButton" and f.get_parent() != null and "values" in f.get_parent()
+	return f is Button and f.theme_type_variation == "RowButton" and f.get_parent() != null and f.get_parent().has_method("is_stepper") \
+		and f.get_parent().is_stepper()
 
 
 ## Hint bar for whatever has focus here, for main.gd's hint bar
@@ -507,6 +512,8 @@ func hints(f: Control) -> Array:
 		var named: String = pg_a.a_hint(f) if pg_a != null and pg_a.has_method("a_hint") else ""
 		if changes_with_lr(f):
 			out.append(["LR", "Change"])
+		elif named == "" and f.get_parent() != null and f.get_parent().has_method("is_stepper"):
+			out.append(["A", "Change"])   # a switch or segmented row: A, not left / right
 		elif named != "":
 			out.append(["A", named])
 		else:
@@ -641,6 +648,8 @@ func open_credits() -> void:
 	r.add_theme_font_size_override("bold_font_size", ThemeLib.SIZE_SMALL)
 	r.add_theme_color_override("default_color", ThemeLib.color("text"))
 	r.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	# the sheet's one control: the D-pad scrolls it (its prompt says so); B closes
+	r.set_meta("ux_action", "the D-pad scrolls the credits")
 	r.text = Credits.to_bbcode(text, "#" + ThemeLib.color("text").to_html(false), "#" + ThemeLib.color("text_2").to_html(false)) if text != "" else TS.CREDITS_MISSING
 	_sheet_body.add_child(r)
 	_sheet_body.add_child(Kit.prompts([["DPAD", "Scroll"], ["B", TS.CLOSE]]))
@@ -721,6 +730,8 @@ func _build_overlays() -> void:
 	keyboard.offset_bottom = -64
 	keyboard.closed.connect(_on_keyboard_closed)
 	add_child(keyboard)
+	# up from the sheet's first row went into the top bar behind the dim
+	FocusTrap.attach(sheet, [keyboard])
 
 
 func _open_sheet() -> void:

@@ -9,6 +9,7 @@ extends Control
 
 const SettingsFile := preload("res://scripts/system/settings_file.gd")
 const ThemeLib := preload("res://theme/gamecove_theme.gd")
+const TouchTargets := preload("res://scripts/ui/touch_targets.gd")
 const Home := preload("res://scripts/ui/home.gd")
 const LibraryScreen := preload("res://scripts/ui/library_screen.gd")
 const DiscoverScreen := preload("res://scripts/ui/discover_screen.gd")
@@ -179,6 +180,8 @@ var _boot_intro: Control
 func _ready() -> void:
 	background = BackgroundMode.new()
 	add_child(background)
+	# every control a finger presses is 48 x 48 or more (docs/CONTROLLER-UX.md CUX-13), from here on
+	add_child(TouchTargets.attach(get_tree()))
 	UiPrefs.load_prefs()
 	# a Steam Machine or a PC by the TV: "device" for "handheld" in every text (words.gd)
 	Words.setup(Device)
@@ -1788,16 +1791,28 @@ func _link_top() -> void:
 	for extra in [page, downloads_view, apps_view]:
 		if extra != null and is_instance_valid(extra) and extra.has_method("set_top_target"):
 			extra.set_top_target(tab)
-	for t in top_bar.tab_buttons():
-		t.focus_neighbor_bottom = t.get_path_to(f if f != null else t)
-		t.focus_neighbor_top = t.get_path_to(t)
+	# Every button of the bar in the order drawn (tabs, Search, Downloads, status, Settings): down goes into the screen.
 	top_bar.link_bar()
-	# The downloads button sits between the tabs and the status pill.
-	Kit.link_horizontal([top_bar.tabs["home"], top_bar.tabs["library"], top_bar.tabs["discover"], top_bar.tabs["stream"], downloads_button, top_bar.status_button, top_bar.tabs["settings"]])
-	downloads_button.focus_neighbor_bottom = downloads_button.get_path_to(f if f != null else top_bar.tabs[current])
-	downloads_button.focus_neighbor_top = downloads_button.get_path_to(downloads_button)
-	top_bar.status_button.focus_neighbor_bottom = top_bar.status_button.get_path_to(f if f != null else top_bar.tabs[current])
-	top_bar.status_button.focus_neighbor_top = top_bar.status_button.get_path_to(top_bar.status_button)
+	# (A screen with nothing to name leaves it to Godot: the nearest control below.)
+	for t in top_bar.pad_order():
+		t.focus_neighbor_bottom = t.get_path_to(f) if f != null else NodePath()
+		t.focus_neighbor_top = t.get_path_to(t)
+		if not t.has_meta("down_wired"):
+			t.set_meta("down_wired", true)
+			t.gui_input.connect(_on_top_bar_input.bind(t))
+
+
+## Down from a top-bar button goes into what is on screen now, asked at the
+## press: its main control (in Settings, the category that is open). The path
+## set when the screen opened went stale once the screen moved on: down from the
+## bar opened the category Settings had started on (docs/CONTROLLER-UX.md CUX-5).
+func _on_top_bar_input(event: InputEvent, t: Control) -> void:
+	if not event.is_action_pressed("ui_down"):
+		return
+	var f: Control = _screen().default_focus()
+	if f != null and f.is_visible_in_tree() and f.focus_mode == Control.FOCUS_ALL:
+		t.accept_event()
+		f.grab_focus()
 
 
 ## Home's and the page's main button. Owned games that aren't installed get
@@ -2498,7 +2513,9 @@ func focus_kind(f: Control) -> String:
 	if f is HSlider:
 		return "slider"
 	if f is Button and f.theme_type_variation == "RowButton":
-		return "row"
+		var cr: Node = f.get_parent()
+		# a switch or segmented row changes on A; only a "‹ value ›" stepper takes left / right
+		return "row" if cr == null or not cr.has_method("is_stepper") or cr.is_stepper() else "toggle"
 	if f is Button and (f.theme_type_variation == "TabButton") and top_bar.is_ancestor_of(f):
 		return "status" if f == top_bar.status_button else "tab"
 	if f is Button and f.name == "Play":
@@ -2519,6 +2536,7 @@ static func hints_for(ctx: Dictionary) -> Array:
 		"app": out.append(["A", "Open"])   # an app's tile: no game options behind Menu
 		"play": out.append(["A", ctx.get("label", "Play")])
 		"row": out.append(["LR", "Change"])
+		"toggle": out.append(["A", "Change"])
 		"slider": out.append(["LR", "Adjust"])
 		"tab": out.append(["A", "Open"])
 		"status": out.append(["A", "Status"])

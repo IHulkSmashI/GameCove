@@ -30,6 +30,7 @@ class FocusCard extends PanelContainer:
 		focusable = true
 		focus_mode = Control.FOCUS_ALL
 		mouse_filter = Control.MOUSE_FILTER_STOP
+		set_meta("ux_action", true)   # A runs it: the focus walk counts the card as a control
 		if not gui_input.is_connected(_on_input):
 			gui_input.connect(_on_input)
 		var head: Node = find_child("Head", true, false)

@@ -69,6 +69,7 @@ func build() -> void:
 		return
 	tab_row = Kit.hbox(6)
 	tab_row.name = "DeviceTabs"
+	tab_row.set_meta("ux_nav_bar", true)   # a press out of it lands on the screen's main control (docs/CONTROLLER-UX.md CUX-5)
 	add_child(tab_row)
 	# LT / RT switch these tabs (LB / RB stay on the top sections).
 	var lt := Kit.glyph("LT", false, true)

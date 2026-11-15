@@ -51,14 +51,14 @@ func test_docked_to_a_tv_interface_size_by_pad_then_undocked() -> void:
 	ok(await down_to(func(): return row.call().button if row.call() else null, 30), "D-pad down to it")
 	var before: Variant = row.call().values[row.call().index]
 	var layout_docked: Vector2i = w.tree.root.content_scale_size
-	await right()
+	await change(1)
 	await w.frames(4)
 	var after: Variant = row.call().values[row.call().index] if row.call() else before
 	ok(after != before, "right: another size (%s -> %s)" % [before, after])
 	eq(str(UiPrefs.values().get("interface_size", "")), str(after), "saved")
 	ok(w.tree.root.content_scale_size != layout_docked, "the layout follows (%s -> %s)" % [layout_docked, w.tree.root.content_scale_size])
 	ok(focus() != null and focus_on_screen() == "", "focus stays on screen at the new size")
-	await left()
+	await change(-1)
 	await w.frames(4)
 	eq(str(UiPrefs.values().get("interface_size", "")), str(before), "left: back")
 	eq(w.tree.root.content_scale_size, layout_docked, "and the layout with it")

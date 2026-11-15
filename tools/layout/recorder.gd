@@ -8,10 +8,12 @@ extends RefCounted
 ## (folder for <set>.json and, with LAYOUT_RENDER=1, the PNGs),
 ## LAYOUT_RENDER=1 (a real window from --resolution: the shots are drawn too;
 ## without it the run is headless and only measures), LAYOUT_FORM
-## ("console" | "desktop": check the wording for a device that isn't a handheld).
+## ("console" | "desktop": check the wording for a device that isn't a handheld),
+## FOCUS_WALK=0 (skip the focus walk, tests/layout/focus_walk.gd: geometry only).
 
 const Matrix := preload("res://tests/layout/matrix.gd")
 const Checks := preload("res://tests/layout/layout_checks.gd")
+const FocusWalk := preload("res://tests/layout/focus_walk.gd")
 const UiScale := preload("res://scripts/ui/ui_scale.gd")
 const Words := preload("res://scripts/ui/words.gd")
 const DeviceScript := preload("res://scripts/device/device.gd")
@@ -65,6 +67,11 @@ static func check(root: Window, name: String) -> void:
 	if row.is_empty():
 		return
 	var res: Dictionary = Checks.scan(root, ctx())
+	# the controller rules (docs/CONTROLLER-UX.md): every D-pad press from every control (FOCUS_WALK=0 skips it)
+	if OS.get_environment("FOCUS_WALK") != "0":
+		var walk: Dictionary = FocusWalk.scan(root)
+		res["problems"].append_array(walk["problems"])
+		res["stats"]["walk"] = walk["stats"]
 	var view := root.get_visible_rect().size
 	if Vector2i(view) != row["layout"] and (Vector2(row["layout"]) - view).length() > 2.0:
 		res["problems"].append({"kind": "layout", "node": "", "text": "", "detail": "window lays out %s, the matrix says %s" % [view, row["layout"]]})

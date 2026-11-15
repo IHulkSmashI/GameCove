@@ -12,7 +12,7 @@ extends PanelContainer
 ##
 ## Controller: A types the focused key, X backspace, Y space, LT or L3 shift,
 ## RT symbols, LB / RB move the caret, Menu is Done, B closes. A held D-pad
-## direction keeps moving (rows and columns wrap around), held backspace keeps
+## direction keeps moving (a row wraps around; the top and bottom rows stop), held backspace keeps
 ## deleting. The keys show those buttons. A physical keyboard types as usual
 ## (Ctrl+V pastes).
 ##
@@ -116,6 +116,7 @@ var _styling := false
 func _init() -> void:
 	name = "Keyboard"
 	theme_type_variation = "GlassPanel"
+	set_meta("ux_modal", "the keyboard owns the pad while it's open")   # docs/CONTROLLER-UX.md CUX-6
 	visible = false
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	# Callers pin the sheet's foot; when it needs more height it grows upward.
@@ -388,17 +389,20 @@ func _show_page() -> void:
 	_link()
 
 
-## Wire the grid so left/right wrap within a row and up/down keep the column
-## (and wrap from the last row to the first).
+## Wire the grid so left/right wrap within a row (a row is a linear list) and
+## up/down keep the column. Up on the top row and down on the action row stay
+## put: a grid doesn't loop top to bottom (docs/CONTROLLER-UX.md CUX-5, XAG 112).
 func _link() -> void:
 	for r in keys.size():
 		var row: Array = keys[r]
+		if not row.is_empty() and row.all(func(k): return k.get_parent() == row[0].get_parent()):
+			row[0].get_parent().set_meta("ux_wrap", true)
 		for i in row.size():
 			var b: Button = row[i]
 			b.focus_neighbor_left = b.get_path_to(row[posmod(i - 1, row.size())])
 			b.focus_neighbor_right = b.get_path_to(row[posmod(i + 1, row.size())])
-			var up: Array = keys[posmod(r - 1, keys.size())]
-			var down: Array = keys[posmod(r + 1, keys.size())]
+			var up: Array = keys[r - 1] if r > 0 else [b]
+			var down: Array = keys[r + 1] if r + 1 < keys.size() else [b]
 			b.focus_neighbor_top = b.get_path_to(up[mini(_column(i, row.size(), up.size()), up.size() - 1)])
 			b.focus_neighbor_bottom = b.get_path_to(down[mini(_column(i, row.size(), down.size()), down.size() - 1)])
 

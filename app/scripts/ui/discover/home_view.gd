@@ -176,6 +176,7 @@ func build() -> void:
 
 	_scroll = W.scroller()
 	_scroll.follow_focus = false
+	_scroll.set_meta("ux_follows", "home_view.gd scrolls the shelves on focus")   # docs/CONTROLLER-UX.md CUX-8
 	root.add_child(_scroll)
 	# A 48 px alpha fade at the foot: the next row peeking in looks masked,
 	# not sliced off under the hint bar.
@@ -501,8 +502,10 @@ func _on_tile_focus(v: Dictionary, i: int, shelf: Control) -> void:
 	var down: Control = shelves[r + 1].remembered() if r + 1 < shelves.size() else (cards_focus[0] if not cards_focus.is_empty() else t)
 	t.focus_neighbor_top = t.get_path_to(up)
 	t.focus_neighbor_bottom = t.get_path_to(down)
-	for b in [primary, secondary]:
-		b.focus_neighbor_bottom = b.get_path_to(t)
+	# down from the spotlight goes to the first shelf (its remembered tile), never past it to a lower one
+	if r == 0:
+		for b in [primary, secondary]:
+			b.focus_neighbor_bottom = b.get_path_to(t)
 	if not cards_focus.is_empty():
 		cards_focus[0].focus_neighbor_top = cards_focus[0].get_path_to(t)
 	_scroll_rows(shelf.position.y)
@@ -587,20 +590,10 @@ func _link() -> void:
 			t.focus_neighbor_top = t.get_path_to(primary)
 	if not cards_focus.is_empty():
 		var above: Control = shelves[-1].remembered() if not shelves.is_empty() else top_target
-		# Each card's buttons sit on one row; up/down move between rows.
-		var rows: Array = []
+		# A card's buttons sit side by side on one row: left / right along it, up / down
+		# between rows (one chain of every button sent down to the button beside: CUX-5).
+		Kit.link_rows(cards_focus, above)
 		for b in cards_focus:
-			rows.append(b)
-		for i in rows.size():
-			var b: Control = rows[i]
-			var up: Control = rows[i - 1] if i > 0 else above
-			b.focus_neighbor_top = b.get_path_to(up if up != null else b)
-			b.focus_neighbor_bottom = b.get_path_to(rows[i + 1] if i + 1 < rows.size() else b)
-			# Buttons beside the first one in a card share its up/down.
-			for sib in b.get_parent().get_children():
-				if sib is Button and sib != b and not sib in rows:
-					sib.focus_neighbor_top = sib.get_path_to(up if up != null else sib)
-					sib.focus_neighbor_bottom = sib.get_path_to(rows[i + 1] if i + 1 < rows.size() else sib)
 			b.focus_entered.connect(func(): _scroll_rows(maxf(0.0, _cards_pad.position.y - 40.0)))
 
 

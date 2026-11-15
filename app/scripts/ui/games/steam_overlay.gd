@@ -65,6 +65,9 @@ func _init() -> void:
 	back_button.focus_neighbor_right = back_button.get_path_to(back_button)
 	back_button.focus_neighbor_top = back_button.get_path_to(back_button)
 	back_button.focus_neighbor_bottom = back_button.get_path_to(back_button)
+	# while Steam's window has the screen, "Back to GameCove" keeps focus: a focus move left
+	# over from the screen behind (a closing Downloads) put it back on Play, under this panel
+	load("res://scripts/ui/focus_trap.gd").attach(self)
 	_restyle()
 
 

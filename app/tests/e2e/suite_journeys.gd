@@ -495,15 +495,15 @@ func step_control(id: String, game_key := "") -> Variant:
 	var c := ctl(id)
 	var cur: Variant = shown_value(id, game_key)
 	if c != null and c.kind == "slider" and cur != null and float(cur) >= c.max_value - 0.0001:
-		await left()
+		await change(-1)
 	else:
-		await right()
+		await change(1)
 	await w.wait_s(0.35)
 	await w.idle()
 	# at the top of what this power source allows (the battery's TDP ceiling under
 	# the slider's plugged-in one): a step down instead
 	if str(shown_value(id, game_key)) == str(cur):
-		await left()
+		await change(-1)
 		await w.wait_s(0.35)
 		await w.idle()
 	return shown_value(id, game_key)
@@ -517,7 +517,7 @@ func step_to(id: String, want: Variant, game_key := "", dir := "left") -> bool:
 	for i in 8:
 		if str(shown_value(id, game_key)) == str(want):
 			return true
-		await call(dir)
+		await change(-1 if dir == "left" else 1)
 		await w.wait_s(0.35)
 		await w.idle()
 	return str(shown_value(id, game_key)) == str(want)
@@ -584,7 +584,7 @@ func test_game_page_own_settings_then_play_with_them() -> void:
 		if goal != null:
 			var g0: Variant = page().form.settings.get("goal")
 			ok(await down_to(goal.button, 10), "the goal row")
-			await right()
+			await change()
 			await w.frames(2)
 			ok(Launcher.settings_for(key).get("goal") != g0, "goal saved (%s)" % Launcher.settings_for(key).get("goal"))
 		ok(await press_on(func(): return page().launch_button, 20), "A closes them")
@@ -735,7 +735,7 @@ func test_settings_every_page_walked_changed_and_put_back() -> void:
 			if row != null and str(row.key) in UI_ROWS and cat == "appearance":
 				var before: Variant = row.values[row.index]
 				var rkey := str(row.key)
-				await right()
+				await change(1)
 				await w.frames(3)
 				row = choice_row_of(focus())   # a new theme rebuilds the page
 				ok(row != null and str(row.key) == rkey, "appearance: focus stays on %s" % rkey)
@@ -745,7 +745,7 @@ func test_settings_every_page_walked_changed_and_put_back() -> void:
 				ok(FileAccess.file_exists(ProjectSettings.globalize_path("user://ui.cfg")), "appearance: saved")
 				if str(row.key) == "theme":
 					eq(str(preload("res://scripts/ui/ui_prefs.gd").values().get("theme", "")), str(row.values[row.index]), "the theme applies")
-				await left()
+				await change(-1)
 				await w.frames(3)
 				row = choice_row_of(focus())
 				ok(row != null and row.values[row.index] == before, "appearance: %s back" % rkey)
