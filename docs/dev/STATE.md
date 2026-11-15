@@ -4,44 +4,38 @@ Each session takes the top unchecked milestone, finishes it and ticks it here. L
 
 ## Where we are
 - **v0.1.0** is published as a hidden pre-release (main `5c8fa49` at the time).
-- The first real install on the MSI Claw 8 EX (Bazzite) found 12 installer problems; they're listed under M2 below.
+- **M1 and M2 are on main** (2026-11-15): the controller rules and the installer's pad fixes, CI green on the four setups and the five layouts.
 - **The Claw right now:**
   - GameCove's RPM is layered with rpm-ostree, pending a reboot.
   - The gyro fix is applied. ClawDeck's InputPlumber device file was moved to `/var/lib/clawdeck-backup-<time>/`; to restore it, move it back to `/etc/inputplumber/devices.d/`.
   - No other fix and no boot choice is applied, so it still boots as before.
-- **Branches waiting:**
-  - `fix/installer-pad` (`db25101`): every installer finding addressed. CI is green except one monkey seed on Home (121003, "nothing has focus").
-  - `feat/controller-ux` (`888b684`): `docs/CONTROLLER-UX.md` (rules CUX-1 to CUX-15) and the focus-walk check in the layout job. Many app-wide fixes are done; the last 4 commits are WIP and untested; the layout job fails until the installer findings land or are listed in `tools/layout/known.json`.
+- **ClawDeck** (`github.com/IHulkSmashI/ClawDeck`, AGPLv3, all the owner's own work, so its code may come into GameCove under GPL-3.0): port from it instead of writing again. All of it applies to the MSI Claw 8 EX; most of it to other Intel handhelds with XMX (not the Claw-only fixes, such as the VRR one). Look first at `docs/HARDWARE-FINDINGS.md`, `py_modules/clawdeck` and `tools/` (gyro, cabinet-lzms, upstream watch).
+- **Pull requests from Claude sessions fail the `cla` check** (the commits are authored as "Claude", which isn't on the allowlist in `.github/workflows/cla.yml`). It doesn't gate main; the owner can add that author to the allowlist or sign on the PR.
 
 ## Milestones
-- [ ] **M1 Controller UX on `feat/controller-ux`.**
-  1. Test the 4 WIP commits; the 48 px touch-target change may move layouts.
-  2. Fix the open list: share sheet focus, quick menu media buttons, read-only device cards taking focus, battery card too tall at 800p, setup art step order, Emulation page order, toasts with nothing focused.
-  3. Run the focus walk on every CI layout.
-  4. Build `tools/ux_walk/sheets.sh` (pad-only contact sheets).
-  5. Get CI green and merge.
-- [ ] **M2 Installer on `fix/installer-pad`.** Merge main (with M1) in, then:
-  1. Fix monkey seed 121003; check main first.
-  2. Clear every focus-walk finding on the installer pages.
-  3. Get CI green and merge.
-
-  The device findings it addresses:
-  1. Closing the terminal kills the installer.
-  2. Welcome cards: double highlight, and A moves on.
-  3. Button rows skip Back.
-  4. Dead store rows take focus.
-  5. Add an Install Heroic button.
-  6. Summary focus order.
-  7. Device radios change on the d-pad.
-  8. The "Press A" hint is weak.
-  9. Hidden extras on "Ready to install".
-  10. ClawDeck leftovers stopped the install, and one failed fix stopped everything.
-  11. The failure-screen buttons are clipped.
-  12. A password per fix, with no keyboard: ask once, with Plasma's keyboard (Steam's on-screen keyboard can't type into KDE's polkit box).
-- [ ] **M3 Owner review.** Render pad-only walkthroughs of first run, Library → game page → play, the quick menu, settings, store sign-in, Emulation, Discover, text entry and the whole installer. The owner approves them on his phone.
+- [x] **M1 Controller UX** (2026-11-15). `docs/CONTROLLER-UX.md` and the focus walk hold every screen on the five CI layouts; 48 px touch targets everywhere.
+  - Fixed: top bar at 1280, Emulation and game page order, Discover (Store over Sort, shelves on wide short screens), quick menu media buttons, read-only device cards (the right stick scrolls pages now, `stick_scroll.gd`), battery card at 800p, share sheet and closing sheets keeping or giving back focus, setup art step, Library's second row at 800p, Settings rows clear of the foot fade, honest hints.
+  - New: `tools/ux_walk/sheets.sh` (one picture per press, contact sheets). Found on the way and fixed: a Library lookup race that could abort the app, and quick repeated presses on a setting ending one step short.
+  - Left: the walk can't finish its reachability pass on pages that rebuild while it walks (device tabs, Deals' store); a Details block on the Fixes page still takes focus to be read.
+- [x] **M2 Installer** (2026-11-15). `fix/installer-pad` merged; no focus-walk finding left on any installer page.
+  - Up from Skip / Back / Continue goes to the control right above; the installer has the 48 px targets when it runs on its own; monkey seeds 121003 (a sheet whose tile was rebuilt) and 128004 are tests now.
+  - The device findings it addresses:
+    1. Closing the terminal kills the installer.
+    2. Welcome cards: double highlight, and A moves on.
+    3. Button rows skip Back.
+    4. Dead store rows take focus.
+    5. Add an Install Heroic button.
+    6. Summary focus order.
+    7. Device radios change on the d-pad.
+    8. The "Press A" hint is weak.
+    9. Hidden extras on "Ready to install".
+    10. ClawDeck leftovers stopped the install, and one failed fix stopped everything.
+    11. The failure-screen buttons are clipped.
+    12. A password per fix, with no keyboard: ask once, with Plasma's keyboard (Steam's on-screen keyboard can't type into KDE's polkit box).
+- [ ] **M3 Owner review.** `GODOT=<editor> tools/ux_walk/sheets.sh OUT` renders them (about 20 minutes for both sizes; a download journey loses its timing under the slower renderer, its pictures are still right). Render pad-only walkthroughs of first run, Library → game page → play, the quick menu, settings, store sign-in, Emulation, Discover, text entry and the whole installer. The owner approves them on his phone.
 - [ ] **M4 Release v0.1.1.**
   1. Short external review of the diff since `5c8fa49`.
-  2. Bump the version; `packaging/release-notes/v0.1.1.md` already exists on `fix/installer-pad`.
+  2. The version is bumped and `packaging/release-notes/v0.1.1.md` is on main (from `fix/installer-pad`); add this session's fixes to the notes.
   3. Run release.yml with publish and prerelease on.
   4. The owner approves the release in a browser.
 - [ ] **M5 Device tests.**
